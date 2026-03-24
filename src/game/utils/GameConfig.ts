@@ -1,6 +1,9 @@
 
 export const GameConfig = {
 
+    WIDTH: 1200,
+    HEIGHT: 700,
+
     STARTING_CREDITS: 1000,
     STARTING_REPUTANTION: 50,
 
@@ -9,6 +12,11 @@ export const GameConfig = {
 
     TICK_RATE_MS: 1000,
     BASE_SHIP_SPEED: 10,
+
+    MIN_SCALE: 0.5,
+    MAX_SCALE: 4.0,
+    SCALE_FACTOR: 3,
+
 
     EVENTS: {
         PIRATE_ATTACK_CHANCE: 0.15,

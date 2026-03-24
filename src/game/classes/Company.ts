@@ -12,7 +12,7 @@ export class Company {
     constructor(name: string) {
         this.name = name;
         this.credits = GameConfig.STARTING_CREDITS;
-        this.credits = GameConfig.STARTING_REPUTANTION;
+        this.reputation = GameConfig.STARTING_REPUTANTION;
         this.fleet = [];
     }
     public addCredits(amount: number) {

@@ -1,5 +1,5 @@
-import { Star, Universe } from './Universe.ts'
-import { GameConfig } from '../utils/GameConfig.ts'
+import { Star, Universe } from './Universe'
+import { GameConfig } from '../utils/GameConfig'
 
 export class Contract {
     public id: string;
@@ -13,10 +13,10 @@ export class Contract {
         this.id = 'CTR-' + Math.floor(Math.random() * 99999);
 
         this.origin = universe.getRandomStar();
-        let dest = universe.getRandomStar();
+        this.destination = universe.getRandomStar();
 
-        while (dest.source_id === this.origin.source_id) {
-            dest = universe.getRandomStar();
+        while (this.destination.source_id === this.origin.source_id) {
+            this.destination = universe.getRandomStar();
         }
         this.distance = universe.calculateDistance(this.origin, this.destination);
 

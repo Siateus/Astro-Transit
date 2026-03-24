@@ -1,13 +1,16 @@
 // src/game/classes/Starfield.ts
 import { Scene, Math as PhaserMath } from 'phaser';
 import { Universe } from './Universe';
+import { GameConfig } from '../utils/GameConfig';
 
 export class Starfield {
-    public readonly scaleFactor: number = 2;
+    public readonly scaleFactor: number;
 
     constructor(scene: Scene, universe: Universe) {
         if (!scene.textures.exists('dot')) {
+            this.scaleFactor = GameConfig.SCALE_FACTOR;
             const graphic = scene.add.graphics();
+
 
             graphic.fillStyle(0xffffff, 1);
             graphic.fillCircle(8, 8, 8); // Desenha o círculo
@@ -16,8 +19,8 @@ export class Starfield {
             graphic.destroy();
         }
 
-        const minScale = 0.05; // Tamanho mínimo (Estrelas distantes)
-        const maxScale = 0.4;  // Tamanho máximo (Estrelas muito brilhantes)
+        const minScale = GameConfig.MIN_SCALE;
+        const maxScale = GameConfig.MAX_SCALE;
 
         universe.stars.forEach(star => {
             const worldX = star.x * this.scaleFactor;
