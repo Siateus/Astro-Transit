@@ -28,10 +28,10 @@ export class UIScene extends Scene {
         const textStyle = { fontFamily: 'MinhaFonteSciFi, monospace', fontSize: 18, color: '#f2f2f2' };
         const highlightStyle = { fontFamily: 'MinhaFonteSciFi, monospace', fontSize: 20, color: '#00ff00', fontStyle: 'bold' };
 
-        this.repText = this.add.text(20, barHeight / 2, `🏢 ${this.companyInfo.name}  |  ⭐ Rep: ${this.companyInfo.reputation}`, textStyle)
+        this.repText = this.add.text(20, barHeight / 2, ` ${this.companyInfo.name}  |   Rep: ${this.companyInfo.reputation}`, textStyle)
             .setOrigin(0, 0.5);
 
-        this.creditsText = this.add.text(GameConfig.WIDTH / 2, barHeight / 2, `💰 ¢ ${this.companyInfo.credits.toLocaleString()}`, highlightStyle)
+        this.creditsText = this.add.text(GameConfig.WIDTH / 2, barHeight / 2, ` ¢ ${this.companyInfo.credits.toLocaleString()}`, highlightStyle)
             .setOrigin(0.5, 0.5);
 
         this.createRightModule(barHeight);
@@ -41,7 +41,7 @@ export class UIScene extends Scene {
 
 
         EventBus.on('update-credits', (newCredits: number) => {
-            this.creditsText.setText(`💰 ¢ ${newCredits.toLocaleString()}`);
+            this.creditsText.setText(` ¢ ${newCredits.toLocaleString()}`);
         });
 
         EventBus.on('update-day', (day: number) => {
