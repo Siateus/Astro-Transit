@@ -4,7 +4,7 @@ export const GameConfig = {
     WIDTH: 1200,
     HEIGHT: 700,
 
-    STARTING_CREDITS: 1000,
+    STARTING_CREDITS: 10000000,
     STARTING_REPUTANTION: 50,
 
     FUEL_COST_PER_UNIT: 5,
@@ -12,6 +12,9 @@ export const GameConfig = {
 
     TICK_RATE_MS: 1000,
     BASE_SHIP_SPEED: 10,
+
+    MAINTENANCE_INTERVAL_DAYS: 10,
+    EVENT_CHECK_INTERVAL_DAYS: 3,
 
     MIN_SCALE: 0.5,
     MAX_SCALE: 4.0,
@@ -27,14 +30,14 @@ export const GameConfig = {
     SHIPS_DATA: {
         BASIC_CARGO: {
             name: "Cargueiro Básico",
-            price: 500,
-            maxFuel: 100,
+            price: 5000,
+            maxFuel: 2000,
             speedMultiplier: 1.0
         },
-        ADVANCED_FIGATE: {
-            name: "Fragate Avançada",
-            price: 2500,
-            maxFuel: 300,
+        ADVANCED_FRIGATE: {
+            name: "Fragata Avançada",
+            price: 8000,
+            maxFuel: 5000,
             speedMultiplier: 1.5
         }
     }

@@ -27,6 +27,7 @@ export class Preloader extends Scene {
         this.load.image('icon_pause', 'pause.png');
         this.load.image('icon_ff', 'fast forward.png');
         this.load.image('topbar', '/UI/TitlePanel01.png')
+        this.load.image('ship', 'ship.png');
         this.load.json('gaia_stars', 'gaia_stars_1000.json');
 
     }
