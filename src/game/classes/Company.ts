@@ -1,7 +1,6 @@
 import { EventBus } from "../EventBus";
 import { GameConfig } from "../utils/GameConfig";
 import { Ship, ShipType } from "./Ship"
-import { Contract } from "./Contract"
 import { Universe, Star } from "./Universe";
 
 
@@ -42,17 +41,21 @@ export class Company {
 
     public buyFuel(shipId: string, amount: number): boolean {
         const ship = this.fleet.find(s => s.id === shipId);
-        if (!ship) {
-            EventBus.emit('log-event', "ERRO: Nave não encontrada!");
-            return false;
-        }
+        if (!ship) return false;
 
-        const totalCost = amount * GameConfig.FUEL_COST_PER_UNIT;
+        const isMonopoly = ship.currentLocation?.owner === 'PLAYER';
+        const pricePerUnit = isMonopoly ? 0 : (ship.currentLocation?.fuelPrice ?? GameConfig.FUEL_COST_PER_UNIT);
+        const totalCost = amount * pricePerUnit;
+
         if (this.credits >= totalCost) {
             this.credits -= totalCost;
             ship.refuel(amount);
             EventBus.emit('update-credits', this.credits);
-            EventBus.emit('log-event', `Nave ${ship.name} reabastecida com ${amount} unidades.`);
+            
+            const msg = isMonopoly 
+                ? `OÁSIS CORPORATIVO: ${ship.name} reabasteceu ${amount}u de graça no seu território!`
+                : `${ship.name} reabasteceu ${amount}u por ¢${totalCost}.`;
+            EventBus.emit('log-event', msg);
             return true;
         } else {
             EventBus.emit('log-event', "ALERTA: Fundos insuficientes para o combustível!");

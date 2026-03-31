@@ -1,12 +1,14 @@
 import { Scene, Math as PhaserMath, GameObjects } from 'phaser';
 import { EventBus } from '../EventBus';
-import { Universe, Star } from '../classes/Universe';
+import { Universe, Star, projectStar } from '../classes/Universe';
 import { Starfield } from '../classes/Starfield';
 import { TimeManager } from '../classes/TimeManager';
 import { Contract } from '../classes/Contract';
 import { EventGenerator } from '../classes/EventGenerator';
 import { Company } from '../classes/Company';
 import { Ship, ShipType } from '../classes/Ship';
+import { UIStyle } from '../ui/UIStyle';
+import { GameConfig } from '../utils/GameConfig';
 
 export class Game extends Scene {
     private universe!: Universe;
@@ -37,7 +39,7 @@ export class Game extends Scene {
     }
 
     create() {
-        this.cameras.main.setBackgroundColor(0x0b1d3a);
+        this.cameras.main.setBackgroundColor(UIStyle.PALETTE.BACKGROUND_DEEP_SPACE);
         this.cameras.main.centerOn(0, 0);
 
         this.universe = new Universe();
@@ -48,7 +50,11 @@ export class Game extends Scene {
         this.company = new Company('Astro-Transit', this.universe);
         this.timeManager = new TimeManager();
 
+        // Fundo cosmético é apenas preto escuro + nebulosas procedurais do Starfield
         this.starfield = new Starfield(this, this.universe);
+
+        // Fase 4: Setup camera listeners para atualizar labels
+        this.starfield.setupCameraListeners();
 
         this.selectionGraphics = this.add.graphics();
         this.selectionGraphics.setDepth(10);
@@ -143,9 +149,8 @@ export class Game extends Scene {
             ship.assignContract(contract);
             contract.status = 'ACCEPTED';
 
-            // Get or create the sprite for this ship
-            const startX = ship.currentLocation.x * this.starfield.scaleFactor;
-            const startY = ship.currentLocation.y * this.starfield.scaleFactor;
+            // Get or create the sprite for this ship using projected coordinates
+            const { x: startX, y: startY } = projectStar(ship.currentLocation, this.starfield.scaleFactor);
             const sprite = this.getOrCreateShipSprite(shipId, startX, startY);
 
             // Start hop-by-hop travel along the calculated path
@@ -165,7 +170,8 @@ export class Game extends Scene {
         });
 
         EventBus.on('daily-event-check', () => {
-            EventGenerator.generateRandomEvent();
+            // Daily events são procesados em EventGenerator.checkDailyEvents()
+            // que é chamado automaticamente em TimeManager.processDailyTick()
         });
 
         EventBus.on('buy-fuel', (data: { shipId: string; amount: number }) => {
@@ -179,9 +185,63 @@ export class Game extends Scene {
                 tween.pause();
                 const sprite = this.shipSprites.get(data.shipId);
                 if (sprite) {
-                    sprite.setTint(0xff0000); // Turns red to indicate danger
+                    sprite.setTint(UIStyle.PALETTE.ERROR.bg); // Turns red to indicate danger
                 }
             }
+        });
+
+        EventBus.on('daily-ai-tick', () => {
+            this.universe.competitors.forEach(comp => {
+                // 5% de chance diária de a IA agir
+                if (Math.random() < 0.05) {
+                    const earned = Math.floor(Math.random() * 2000) + 500;
+                    comp.credits += earned;
+                    comp.reputation += Math.floor(Math.random() * 3);
+                    
+                    // IA tenta dominar um sistema aleatório (preferencialmente explorado para dar dinamismo visível ao jogador)
+                    const exploredStars = this.universe.stars.filter(s => s.isExplored);
+                    if (exploredStars.length > 0) {
+                        const targetStar = exploredStars[Math.floor(Math.random() * exploredStars.length)];
+                        
+                        // Ignora o sistema Capital (ID 0) para o jogador não perder a Terra
+                        if (targetStar.source_id !== 0) {
+                            if (targetStar.owner === 'PLAYER') {
+                                // IA ataca o território do jogador
+                                targetStar.influence = Math.max(0, (targetStar.influence || 100) - 25);
+                                if (targetStar.influence <= 0) {
+                                    targetStar.owner = comp.name; // IA rouba o sistema
+                                    EventBus.emit('log-event', `⚠ ALERTA CRÍTICO: ${comp.name} destruiu o nosso monopólio no Sistema ${targetStar.source_id}!`);
+                                    this.updateFogOfWar(); // Atualiza a cor do mapa
+                                }
+                            } else if (targetStar.owner !== comp.name) {
+                                // IA domina sistemas neutros ou de outras IAs
+                                targetStar.influence = (targetStar.influence || 0) + 25;
+                                if (targetStar.influence >= 100) {
+                                    targetStar.influence = 100;
+                                    targetStar.owner = comp.name;
+                                    this.updateFogOfWar();
+                                }
+                            }
+                        }
+                    }
+
+                    // Notícia de mega-contrato
+                    if (earned > 2500) {
+                        EventBus.emit('log-event', `NOTÍCIA: ${comp.name} expande operações com lucro de ¢${earned}.`);
+                    }
+                }
+            });
+        });
+        // Calcula e envia o Ranking quando a UI pedir
+        EventBus.on('request-ranking', () => {
+            const rankingData = [
+                { name: this.company.name, rep: this.company.reputation, cred: this.company.credits, isPlayer: true },
+                ...this.universe.competitors.map(c => ({ name: c.name, rep: c.reputation, cred: c.credits, isPlayer: false }))
+            ];
+            
+            // Ordena por Reputação (Maior para o Menor)
+            rankingData.sort((a, b) => b.rep - a.rep);
+            EventBus.emit('receive-ranking', rankingData);
         });
     }
 
@@ -199,6 +259,21 @@ export class Game extends Scene {
             this.company.addCredits(contract.reward);
             EventBus.emit('log-event', `✓ Entrega concluída! +¢${contract.reward.toLocaleString()}`);
             
+            // Ganhar influência no sistema de destino
+            const destStar = contract.destination;
+            if (destStar.owner !== 'PLAYER') {
+                destStar.influence = (destStar.influence || 0) + 25; // Precisa de 4 entregas para dominar
+                
+                if (destStar.influence >= 100) {
+                    destStar.influence = 100;
+                    destStar.owner = 'PLAYER';
+                    EventBus.emit('log-event', `SUCESSO: A sua empresa estabeleceu um Monopólio no Sistema ${destStar.source_id}!`);
+                }
+            }
+            
+            // Atualiza visuals do mapa
+            this.updateFogOfWar();
+            
             // Sprite stays at the final destination (NOT destroyed)
             this.shipTweens.delete(ship.id);
             return;
@@ -214,9 +289,8 @@ export class Game extends Scene {
         // Adjust base multiplier to control travel speed visually
         const duration = (jumpDistance * 100) / ship.speedMultiplier;
 
-        // Convert world coordinates for the next star
-        const destX = nextStar.x * this.starfield.scaleFactor;
-        const destY = nextStar.y * this.starfield.scaleFactor;
+        // Convert world coordinates for the next star to 2.5D
+        const { x: destX, y: destY } = projectStar(nextStar, this.starfield.scaleFactor);
 
         // Create a tween for this single hop
         const tween = this.tweens.add({
@@ -227,6 +301,14 @@ export class Game extends Scene {
             onComplete: () => {
                 // Update ship's location to the new star
                 ship.currentLocation = nextStar;
+                
+                // Explora o novo sistema e atualiza o mapa
+                this.universe.exploreNode(nextStar.source_id);
+                this.updateFogOfWar();
+                
+                // NOVO: Atualiza risco dinâmico e verifica eventos do hop
+                nextStar.piracyRisk = this.universe.recalculatePiracyRisk(nextStar);
+                EventGenerator.checkDailyEvents(ship, this.company);
                 
                 // Remove this tween and recursively continue to next hop
                 this.shipTweens.delete(ship.id);
@@ -244,8 +326,12 @@ export class Game extends Scene {
         this.shipTweens.set(ship.id, tween);
     }
 
+    private updateFogOfWar(): void {
+        this.starfield.updateVisuals(this.universe);
+    }
+
     private setupInputs() {
-        this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
+        this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: any, _deltaX: number, deltaY: number) => {
             const zoomMultiplier = deltaY > 0 ? 0.9 : 1.1;
             let newZoom = this.cameras.main.zoom * zoomMultiplier;
             this.cameras.main.zoom = PhaserMath.Clamp(newZoom, 0.1, 5);
@@ -267,9 +353,7 @@ export class Game extends Scene {
 
             for (const star of this.universe.stars) {
 
-                const worldX = star.x * this.starfield.scaleFactor;
-
-                const worldY = star.y * this.starfield.scaleFactor;
+                const { x: worldX, y: worldY } = projectStar(star, this.starfield.scaleFactor);
 
                 const dist = PhaserMath.Distance.Between(clickX, clickY, worldX, worldY);
 
@@ -286,10 +370,9 @@ export class Game extends Scene {
 
             this.selectionGraphics.clear();
             if (closestStar) {
-                const targetX = closestStar.x * this.starfield.scaleFactor;
-                const targetY = closestStar.y * this.starfield.scaleFactor;
+                const { x: targetX, y: targetY } = projectStar(closestStar, this.starfield.scaleFactor);
 
-                this.selectionGraphics.lineStyle(2 / this.cameras.main.zoom, 0x39c0f9, 1);
+                this.selectionGraphics.lineStyle(2 / this.cameras.main.zoom, UIStyle.PALETTE.CONNECTION_LINE, 1);
                 this.selectionGraphics.strokeCircle(targetX, targetY, 8 / this.cameras.main.zoom);
 
                 EventBus.emit('star-selected', closestStar);
@@ -299,7 +382,29 @@ export class Game extends Scene {
             }
         });
     }
-    update(time: number, delta: number): void {
+    update(_time: number, delta: number): void {
         this.timeManager.update(delta, this.company);
+        
+        // Verificar condição de fim de jogo (período avaliativo ou falência)
+        if (this.timeManager.day >= GameConfig.MAX_DAYS) {
+            this.scene.stop('UIScene');
+            this.scene.start('GameOver', { 
+                playerName: this.company.name,
+                playerCredits: this.company.credits,
+                playerReputation: this.company.reputation,
+                playerDominatedSystems: this.universe.stars.filter(s => s.owner === 'PLAYER').length,
+                competitors: this.universe.competitors
+            });
+        } else if (this.company.credits <= 0) {
+            this.scene.stop('UIScene');
+            this.scene.start('GameOver', { 
+                playerName: this.company.name,
+                playerCredits: this.company.credits,
+                playerReputation: this.company.reputation,
+                playerDominatedSystems: this.universe.stars.filter(s => s.owner === 'PLAYER').length,
+                competitors: this.universe.competitors,
+                gameOverReason: 'BANKRUPTCY'
+            });
+        }
     }
 }

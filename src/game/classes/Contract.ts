@@ -13,6 +13,7 @@ export class Contract {
     public reward: number;
     public riskLevel: 'BAIXO' | 'MÉDIO' | 'ALTO';
     public status: 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'FAILED';
+    public deadlineDays: number;
 
     constructor(universe: Universe, origin: Star, destination: Star) {
         this.id = 'CTR-' + Math.floor(Math.random() * 99999);
@@ -24,6 +25,7 @@ export class Contract {
         this.averagePiracyRisk = 0;
         this.reward = 0;
         this.riskLevel = 'BAIXO';
+        this.deadlineDays = (this.path.length * 2) + 3;
 
         // Calculate path using Dijkstra's algorithm
         const calculatedPath = RoutePlanner.calculatePath(universe, origin, destination);
@@ -91,11 +93,10 @@ export class Contract {
 
     private calculateEstimatedFuelCost(): void {
         this.estimatedFuelCost = 0;
-
         for (const star of this.path) {
-            if (star.fuelPrice !== undefined) {
-                this.estimatedFuelCost += star.fuelPrice;
-            }
+            // Usa o fuelPrice da estrela ou o preço padrão do Config
+            const price = star.fuelPrice ?? GameConfig.FUEL_COST_PER_UNIT;
+            this.estimatedFuelCost += price;
         }
     }
 

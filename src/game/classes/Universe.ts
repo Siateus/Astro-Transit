@@ -12,19 +12,25 @@ export interface Star {
     fuelPrice?: number;
     piracyRisk?: number;
     connections?: number[];
+    hasStation?: boolean;
+    isExplored?: boolean;
+    influence?: number;
+    owner?: string | null;
+    visitCount?: number;
 }
 
 export interface CompetitorCompany {
     name: string;
     reputation: number;
+    credits: number;
 }
 
 export class Universe {
     public stars: Star[] = [];
     public competitors: CompetitorCompany[] = [
-        { name: 'Void Express Corp', reputation: 45 },
-        { name: 'Stellar Freight Inc', reputation: 38 },
-        { name: 'Galaxy Logistics', reputation: 52 }
+        { name: 'Void Express Corp', reputation: 45, credits: 15000 },
+        { name: 'Stellar Freight Inc', reputation: 38, credits: 20000 },
+        { name: 'Galaxy Logistics', reputation: 52, credits: 18000 }
     ];
 
     public loadSstarData(starData: Star[]) {
@@ -33,6 +39,9 @@ export class Universe {
         // HOTFIX: Previne colisões de 64-bit no JS reescrevendo o ID para o índice real
         this.stars.forEach((star, index) => {
             star.source_id = index;
+            // Inicializa influência e ownership
+            star.influence = 0;
+            star.owner = null;
         });
 
         console.log(`Universo carregado: ${this.stars.length} estrelas mapeadas.`);
@@ -40,8 +49,15 @@ export class Universe {
         // Classifica as regiões
         this.classifyRegions();
         
-        // Gera a malha estelar
-        this.generateStarlanes(5);
+        // Gera a malha estelar (4 conexões para melhor conectividade da galáxia)
+        this.generateStarlanes(4);
+        
+        // Inicializa o mapa: explora o sistema capital
+        this.exploreNode(0);
+        
+        // O Sistema Capital já começa dominado pelo jogador
+        this.stars[0].influence = 100;
+        this.stars[0].owner = 'PLAYER';
     }
 
     private classifyRegions(): void {
@@ -65,6 +81,9 @@ export class Universe {
             
             // Initialize connections array
             star.connections = [];
+            
+            // Gera postos de combustível (20% de chance, garantido no ID 0)
+            star.hasStation = (star.source_id === 0) || (Math.random() < 0.20);
         });
     }
 
@@ -114,4 +133,64 @@ export class Universe {
     public getStarById(sourceId: number): Star | undefined {
         return this.stars[sourceId];
     }
+
+    public exploreNode(starId: number): void {
+        const star = this.getStarById(starId);
+        if (!star) return;
+
+        // Marca a estrela como explorada
+        star.isExplored = true;
+        star.visitCount = (star.visitCount || 0) + 1;
+
+        // Marca todos os vizinhos diretos como explorados
+        if (star.connections && star.connections.length > 0) {
+            star.connections.forEach(neighborId => {
+                const neighbor = this.getStarById(neighborId);
+                if (neighbor) {
+                    neighbor.isExplored = true;
+                }
+            });
+        }
+    }
+
+    /**
+     * Calcula risco de pirataria dinâmico baseado em exploração
+     * - Não explorado: 80% (muito perigoso, desconhecido)
+     * - Explorado: Risco reduzido por região (5-35%)
+     * - Visitado múltiplas vezes: Risco reduz 50% ao atingir 3+ visitas
+     */
+    public recalculatePiracyRisk(star: Star): number {
+        // Se não foi explorado, risco máximo (desconhecido)
+        if (!star.isExplored) {
+            return 0.8;
+        }
+
+        // Base de risco por região
+        let baseRisk = 0.1;
+        if (star.region === 'CORE') {
+            baseRisk = 0.05;
+        } else if (star.region === 'MID_RIM') {
+            baseRisk = 0.15; // Reduzido de 0.20
+        } else if (star.region === 'OUTER_RIM') {
+            baseRisk = 0.35; // Reduzido de 0.45
+        }
+
+        // Reduz risco 50% se visitado 3+ vezes (familiaridade)
+        if ((star.visitCount || 0) >= 3) {
+            baseRisk *= 0.5;
+        }
+
+        return baseRisk;
+    }
+}
+
+export function projectStar(star: Star, scaleFactor: number): { x: number, y: number } {
+    // Aspecto 2.5D pseudo-isométrico (Disco Inclinado a 60 graus)
+    const TILT_ANGLE = Math.PI / 3; 
+    
+    const x = star.x * scaleFactor;
+    // Comprime o Y e levanta fisicamente o Z da estrela caso exista
+    const y = (star.y * Math.cos(TILT_ANGLE) - (star.z || 0) * Math.sin(TILT_ANGLE)) * scaleFactor;
+    
+    return { x, y };
 }

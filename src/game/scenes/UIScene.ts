@@ -5,10 +5,10 @@ import { GameConfig } from '../utils/GameConfig';
 import { Company } from '../classes/Company';
 import { Star } from '../classes/Universe';
 import { Contract } from '../classes/Contract';
-
+import { UIFactory } from '../ui/UIFactory';
+import { UIStyle } from '../ui/UIStyle';
 export class UIScene extends Scene {
     private creditsText!: GameObjects.Text;
-    private repText!: GameObjects.Text;
     private dateText!: GameObjects.Text;
     private targetPanel!: GameObjects.Container;
     private targetText!: GameObjects.Text;
@@ -25,6 +25,12 @@ export class UIScene extends Scene {
     private marketContracts: Contract[] = [];
     private marketShipId: string | null = null;
     private shipyardPanel!: GameObjects.Container;
+    private rankingPanel!: GameObjects.Container;
+    private rankingListText!: GameObjects.Text;
+    private eventModal!: GameObjects.Container;
+    private eventTitleText!: GameObjects.Text;
+    private eventDescText!: GameObjects.Text;
+    private eventButtons: GameObjects.Container[] = [];
 
     constructor() {
         super('UIScene');
@@ -36,24 +42,25 @@ export class UIScene extends Scene {
     }
 
     create() {
-
-        const barHeight = 50;
-        this.add.image(0, 0, 'topbar')
+        const barHeight = 40;
+        this.add.image(0, 0, 'panel_title_01')
             .setOrigin(0, 0)
-            .setDisplaySize(GameConfig.WIDTH, barHeight);
+            .setDisplaySize(GameConfig.WIDTH, barHeight)
+            .setAlpha(0.95);
 
-        const textStyle = { fontFamily: 'Courier New, monospace', fontSize: 18, color: '#f2f2f2' };
-        const highlightStyle = { fontFamily: 'Courier New, monospace', fontSize: 20, color: '#00ff00', fontStyle: 'bold' };
+        // Use UIStyle presets
+        const statusStyle = UIStyle.TYPOGRAPHY.PRESET.STATUS_BAR as any;
+        const highlightStyle = UIStyle.TYPOGRAPHY.PRESET.HIGHLIGHT as any;
 
-        // Agora usa os dados reais da empresa que chegaram no init()
+        // Company info
         const companyName = this.company ? this.company.name : 'Empresa Desconhecida';
         const companyRep = this.company ? this.company.reputation : 0;
         const companyCred = this.company ? this.company.credits.toLocaleString() : 0;
 
-        this.repText = this.add.text(20, barHeight / 2, `🏢 ${companyName}  |    Rep: ${companyRep}`, textStyle)
+        this.add.text(20, barHeight / 2, `🏢 ${companyName}  |    Rep: ${companyRep}`, statusStyle as any)
             .setOrigin(0, 0.5);
 
-        this.creditsText = this.add.text(GameConfig.WIDTH / 2, barHeight / 2, ` ¢ ${companyCred}`, highlightStyle)
+        this.creditsText = this.add.text(GameConfig.WIDTH / 2, barHeight / 2, ` ¢ ${companyCred}`, highlightStyle as any)
             .setOrigin(0.5, 0.5);
 
         this.createRightModule(barHeight);
@@ -69,6 +76,12 @@ export class UIScene extends Scene {
 
         this.createShipyardPanel();
 
+        this.createRankingPanel();
+
+        this.createEventModal();
+
+
+
     
 
         EventBus.on('update-credits', (newCredits: number) => {
@@ -83,8 +96,12 @@ export class UIScene extends Scene {
             this.selectedStar = star;
             if (star) {
                 this.targetPanel.setVisible(true);
-                const dist = Math.sqrt((star.x) ** 2 + (star.y) ** 2).toFixed(2);
-                this.targetText.setText(`SISTEMA: ${star.source_id}\nDISTÂNCIA: ${dist} PC\nMAGNITUDE: ${star.phot_g_mean_mag.toFixed(1)}`);
+                const ownerText = star.owner === 'PLAYER' ? 'Sua Empresa' : 'Independente';
+                const infText = star.owner === 'PLAYER' ? 'MAX' : `${star.influence || 0}%`;
+                
+                this.targetText.setText(
+                    `SISTEMA: ${star.source_id}\nDONO: ${ownerText} (Inf: ${infText})\nPOSTO DE FUEL: ${star.hasStation ? 'SIM' : 'NÃO'}`
+                );
             } else {
                 this.targetPanel.setVisible(false);
             }
@@ -134,17 +151,23 @@ export class UIScene extends Scene {
     private createRightModule(barHeight: number) {
         const rightEdge = GameConfig.WIDTH - 20;
 
-        this.createIconButton(rightEdge - 20, barHeight / 2, 'icon_ff', () => EventBus.emit('time-fastforward'));
+        // Icon buttons (time controls)
+        UIFactory.createIconButton(this, rightEdge - 20, barHeight / 2, 'icon_ff', () => EventBus.emit('time-fastforward'));
+        
+        let isPaused = false;
+        const playPauseBtn = UIFactory.createIconButton(this, rightEdge - 70, barHeight / 2, 'icon_pause', () => {
+            isPaused = !isPaused;
+            if (isPaused) {
+                (playPauseBtn.getAt(1) as Phaser.GameObjects.Image).setTexture('icon_play');
+                EventBus.emit('time-pause');
+            } else {
+                (playPauseBtn.getAt(1) as Phaser.GameObjects.Image).setTexture('icon_pause');
+                EventBus.emit('time-play');
+            }
+        });
 
-        this.createIconButton(rightEdge - 70, barHeight / 2, 'icon_play', () => EventBus.emit('time-play'));
-
-        this.createIconButton(rightEdge - 120, barHeight / 2, 'icon_pause', () => EventBus.emit('time-pause'));
-
-        // Shipyard button
-        const shipyardBtnText = this.add.text(rightEdge - 240, barHeight / 2, 'ESTALEIRO', { fontFamily: 'Courier New, monospace', fontSize: 13, color: '#ffaa00' }).setOrigin(0.5, 0.5).setInteractive({ useHandCursor: true });
-        shipyardBtnText.on('pointerover', () => shipyardBtnText.setColor('#ffffff'));
-        shipyardBtnText.on('pointerout', () => shipyardBtnText.setColor('#ffaa00'));
-        shipyardBtnText.on('pointerdown', () => {
+        // Shipyard button (Icon placeholder: 🛠)
+        UIFactory.createTextButton(this, rightEdge - 120, barHeight / 2, '🛠', UIStyle.PALETTE.PRIMARY_ORANGE, () => {
             if (this.shipyardPanel.visible) {
                 this.shipyardPanel.setVisible(false);
                 this.shipyardPanel.setScale(0);
@@ -154,89 +177,112 @@ export class UIScene extends Scene {
                 this.tweens.add({
                     targets: this.shipyardPanel,
                     scale: 1,
-                    duration: 300,
-                    ease: 'Back.easeOut'
+                    duration: UIStyle.ANIMATION.DURATION_NORMAL,
+                    ease: UIStyle.ANIMATION.EASE
                 });
             }
-        });
+        }, 16);
 
-        // Fleet button
-        const fleetBtnText = this.add.text(rightEdge - 170, barHeight / 2, 'FROTA', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#39c0f9' }).setOrigin(0.5, 0.5).setInteractive({ useHandCursor: true });
-        fleetBtnText.on('pointerover', () => fleetBtnText.setColor('#ffffff')); // Mudei de amarelo para branco
-        fleetBtnText.on('pointerout', () => fleetBtnText.setColor('#39c0f9'));
-        fleetBtnText.on('pointerdown', () => {
+        // Fleet button (Icon placeholder: 🚀)
+        UIFactory.createTextButton(this, rightEdge - 170, barHeight / 2, '🚀', UIStyle.PALETTE.PRIMARY_BLUE, () => {
             this.fleetPanel.setVisible(!this.fleetPanel.visible);
             if (this.fleetPanel.visible) {
                 this.updateFleetPanel();
             }
-        });
+        }, 16);
 
-        this.dateText = this.add.text(rightEdge - 160, barHeight / 2, `DIA 1`, { fontFamily: 'Courier New, monospace', fontSize: 18, color: '#ffffff' })
+        // Ranking button (Icon placeholder: 🏆)
+        UIFactory.createTextButton(this, rightEdge - 220, barHeight / 2, '🏆', UIStyle.PALETTE.PRIMARY_ORANGE, () => {
+            EventBus.emit('request-ranking');
+        }, 16);
+
+        // Date text
+        this.dateText = UIFactory.createText(this, rightEdge - 270, barHeight / 2, 'DIA 1', 'status_bar')
             .setOrigin(1, 0.5);
-    }
-
-    private createIconButton(x: number, y: number, texture: string, onClick: () => void) {
-        const btn = this.add.image(x, y, texture)
-            .setInteractive({ useHandCursor: true })
-            .setOrigin(0.5, 0.5)
-            .setScale(0.7);
-        btn.on('pointerover', () => btn.setTint(0x39c0f9));
-        btn.on('pointerout', () => btn.clearTint());
-        btn.on('pointerdown', () => {
-            btn.setTint(0x00ff00);
-            onClick();
-        });
     }
 
     private createFloatingTargetPanel() {
         this.targetPanel = this.add.container(GameConfig.WIDTH - 320, GameConfig.HEIGHT - 180);
 
-        const bg = this.add.rectangle(0, 0, 300, 160, 0x0b1d3a, 0.8).setOrigin(0, 0);
-        bg.setStrokeStyle(1, 0x39c0f9);
+        // Panel background using asset
+        const panelBg = this.add.image(0, 0, 'panel_select_01').setOrigin(0, 0);
+        panelBg.setDisplaySize(300, 160);
 
-        this.add.rectangle(0, 0, 300, 30, 0x39c0f9, 0.2).setOrigin(0, 0);
-        const title = this.add.text(150, 15, 'DADOS DE TELEMETRIA', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#39c0f9' }).setOrigin(0.5, 0.5);
+        // Title
+        const title = this.add.text(150, 15, 'DADOS DE TELEMETRIA', {
+            fontFamily: 'Arial Black, sans-serif',
+            fontSize: 14,
+            color: '#39c0f9',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
 
-        this.targetText = this.add.text(15, 45, '', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#ffffff', lineSpacing: 8 });
+        // Telemetry text
+        this.targetText = this.add.text(15, 45, '', {
+            fontFamily: 'Courier New, monospace',
+            fontSize: 12,
+            color: '#ffffff',
+            lineSpacing: 6,
+        });
 
-        const contractBtnBg = this.add.rectangle(150, 130, 270, 36, 0xe6a822).setInteractive({ useHandCursor: true });
-        const contractBtnText = this.add.text(150, 130, 'ANALISAR ROTAS COMERCIAIS', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#000', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
+        // Button: Analisar Rotas
+        const btnAnalyze = this.add.image(150, 130, 'btn_01').setDisplaySize(200, 30);
+        const btnAnalyzeTxt = this.add.text(150, 130, 'ANALISAR ROTAS', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 11,
+            color: '#ffffff',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
 
-        contractBtnBg.on('pointerover', () => contractBtnBg.setFillStyle(0xffc13b));
-        contractBtnBg.on('pointerout', () => contractBtnBg.setFillStyle(0xe6a822));
-        contractBtnBg.on('pointerdown', () => {
-            contractBtnBg.setFillStyle(0xaa7700);
+        btnAnalyze.setInteractive({ useHandCursor: true });
+        btnAnalyze.on('pointerover', () => btnAnalyze.setTint(0xcccccc));
+        btnAnalyze.on('pointerout', () => btnAnalyze.clearTint());
+        btnAnalyze.on('pointerdown', () => {
             if (this.selectedStar && this.activeShipId) {
                 EventBus.emit('analyze-contract', this.activeShipId, this.selectedStar);
             } else {
-                console.error("Falha ao gerar contrato. Dados:", { star: this.selectedStar, activeShipId: this.activeShipId });
                 EventBus.emit('log-event', 'ERRO: Selecione uma nave antes de analisar rotas comerciais.');
             }
         });
 
-        this.targetPanel.add([bg, title, this.targetText, contractBtnBg, contractBtnText]);
-        //this.targetPanel.setVisible(false);
+        this.targetPanel.add([panelBg, title, this.targetText, btnAnalyze, btnAnalyzeTxt]);
     }
 
     private createContractModal() {
         this.contractPanel = this.add.container(GameConfig.WIDTH / 2 - 200, GameConfig.HEIGHT / 2 - 150);
 
-        const bg = this.add.rectangle(0, 0, 400, 300, 0x0b1d3a, 0.9).setOrigin(0, 0);
-        bg.setStrokeStyle(2, 0x39c0f9);
+        // Panel background
+        const panelBg = this.add.image(0, 0, 'panel_main_01').setOrigin(0, 0);
+        panelBg.setDisplaySize(400, 300);
 
-        const title = this.add.text(200, 20, 'CONTRATO COMERCIAL', { fontFamily: 'Courier New, monospace', fontSize: 18, color: '#39c0f9' }).setOrigin(0.5, 0.5);
+        // Title
+        const title = this.add.text(200, 20, 'CONTRATO COMERCIAL', {
+            fontFamily: 'Arial Black, sans-serif',
+            fontSize: 18,
+            color: '#39c0f9',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
 
-        this.contractDetailsText = this.add.text(20, 60, '', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#ffffff', lineSpacing: 10 });
+        // Contract details text
+        this.contractDetailsText = this.add.text(20, 60, '', {
+            fontFamily: 'Courier New, monospace',
+            fontSize: 12,
+            color: '#ffffff',
+            lineSpacing: 8,
+        });
 
-        const acceptBtnBg = this.add.rectangle(100, 250, 120, 40, 0x00ff00).setInteractive({ useHandCursor: true });
-        const acceptBtnText = this.add.text(100, 250, 'ACEITAR', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#000' }).setOrigin(0.5, 0.5);
+        // Accept button
+        const btnAccept = this.add.image(100, 250, 'btn_01').setDisplaySize(100, 35);
+        const txtAccept = this.add.text(100, 250, 'ACEITAR', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 12,
+            color: '#ffffff',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
 
-        const declineBtnBg = this.add.rectangle(300, 250, 120, 40, 0xff0000).setInteractive({ useHandCursor: true });
-        const declineBtnText = this.add.text(300, 250, 'RECUSAR', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#000' }).setOrigin(0.5, 0.5);
-
-        acceptBtnBg.on('pointerover', () => acceptBtnBg.setFillStyle(0x00aa00));
-        acceptBtnBg.on('pointerout', () => acceptBtnBg.setFillStyle(0x00ff00));
-        acceptBtnBg.on('pointerdown', () => {
+        btnAccept.setInteractive({ useHandCursor: true });
+        btnAccept.on('pointerover', () => btnAccept.setTint(0xcccccc));
+        btnAccept.on('pointerout', () => btnAccept.clearTint());
+        btnAccept.on('pointerdown', () => {
             if (this.currentContract && this.currentContractShipId) {
                 EventBus.emit('contract-accepted', this.currentContract, this.currentContractShipId);
                 this.contractPanel.setVisible(false);
@@ -245,14 +291,24 @@ export class UIScene extends Scene {
             }
         });
 
-        declineBtnBg.on('pointerover', () => declineBtnBg.setFillStyle(0xaa0000));
-        declineBtnBg.on('pointerout', () => declineBtnBg.setFillStyle(0xff0000));
-        declineBtnBg.on('pointerdown', () => {
+        // Decline button
+        const btnDecline = this.add.image(300, 250, 'btn_01').setDisplaySize(100, 35);
+        const txtDecline = this.add.text(300, 250, 'RECUSAR', {
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 12,
+            color: '#ffffff',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
+
+        btnDecline.setInteractive({ useHandCursor: true });
+        btnDecline.on('pointerover', () => btnDecline.setTint(0xcccccc));
+        btnDecline.on('pointerout', () => btnDecline.clearTint());
+        btnDecline.on('pointerdown', () => {
             this.contractPanel.setVisible(false);
             this.currentContract = null;
         });
 
-        this.contractPanel.add([bg, title, this.contractDetailsText, acceptBtnBg, acceptBtnText, declineBtnBg, declineBtnText]);
+        this.contractPanel.add([panelBg, title, this.contractDetailsText, btnAccept, txtAccept, btnDecline, txtDecline]);
         this.contractPanel.setVisible(false);
         this.contractPanel.setScale(0);
     }
@@ -261,8 +317,8 @@ export class UIScene extends Scene {
         const alertY = 100 + (this.eventAlerts.length * 60);
         const alertContainer = this.add.container(GameConfig.WIDTH / 2, alertY);
 
-        const alertBg = this.add.rectangle(0, 0, 400, 50, 0xff6600, 0.9).setOrigin(0.5, 0.5);
-        alertBg.setStrokeStyle(1, 0xffaa00);
+        const alertBg = this.add.rectangle(0, 0, 400, 50, UIStyle.PALETTE.EVENT_ALERT_BG, 0.9).setOrigin(0.5, 0.5);
+        alertBg.setStrokeStyle(1, UIStyle.PALETTE.WARNING.bg as number);
         const alertText = this.add.text(0, 0, message, { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#ffffff', wordWrap: { width: 380 } }).setOrigin(0.5, 0.5);
 
         alertContainer.add([alertBg, alertText]);
@@ -286,27 +342,44 @@ export class UIScene extends Scene {
     private createFleetModal() {
         this.fleetPanel = this.add.container(20, 80);
 
-        const bg = this.add.rectangle(0, 0, 300, 400, 0x0b1d3a, 0.95).setOrigin(0, 0);
-        bg.setStrokeStyle(2, 0x39c0f9);
+        // Panel background
+        const panelBg = this.add.image(0, 0, 'panel_main_01').setOrigin(0, 0);
+        panelBg.setDisplaySize(300, 400);
 
-        const title = this.add.text(150, 15, 'FROTA', { fontFamily: 'Courier New, monospace', fontSize: 16, color: '#39c0f9' }).setOrigin(0.5, 0.5);
+        // Title
+        const title = this.add.text(150, 15, 'FROTA', {
+            fontFamily: 'Arial Black, sans-serif',
+            fontSize: 16,
+            color: '#39c0f9',
+            fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5);
 
-        this.fleetPanel.add([bg, title]);
+        this.fleetPanel.add([panelBg, title]);
         this.fleetPanel.setVisible(false);
     }
 
     private createMarketPanel() {
-        this.marketPanel = this.add.container(GameConfig.WIDTH / 2 - 250, GameConfig.HEIGHT / 2 - 200);
+        // Use UIFactory to create market panel (warning type for accent color)
+        this.marketPanel = UIFactory.createPanel(
+            this,
+            GameConfig.WIDTH / 2 - 250,
+            GameConfig.HEIGHT / 2 - 200,
+            500,
+            400,
+            'MERCADO LOCAL',
+            'warning'
+        );
 
-        const bg = this.add.rectangle(0, 0, 500, 400, 0x0b1d3a, 0.95).setOrigin(0, 0);
-        bg.setStrokeStyle(2, 0xaa00aa);
+        // Add header divider (local coordinates to panel)
+        const headerLine = UIFactory.createDivider(
+            this,
+            10,
+            40,
+            490 - 20,
+            0xaa00aa  // Purple color for market panel
+        );
+        this.marketPanel.add(headerLine);
 
-        const title = this.add.text(250, 15, 'MERCADO LOCAL', { fontFamily: 'Courier New, monospace', fontSize: 18, color: '#aa00aa' }).setOrigin(0.5, 0.5);
-
-        // Header for contract list
-        const headerLine = this.add.line(0, 40, 10, 40, 490, 40, 0xaa00aa, 0.3);
-
-        this.marketPanel.add([bg, title, headerLine]);
         this.marketPanel.setVisible(false);
         this.marketPanel.setScale(0);
     }
@@ -336,11 +409,11 @@ export class UIScene extends Scene {
             );
 
             // ACEITAR button for this contract
-            const acceptBtn = this.add.rectangle(430, yOffset + 8, 60, 30, 0x00cc00).setInteractive({ useHandCursor: true });
-            const acceptText = this.add.text(430, yOffset + 8, 'ACEITAR', { fontFamily: 'Courier New, monospace', fontSize: 9, color: '#000' }).setOrigin(0.5, 0.5);
+            const acceptBtn = this.add.rectangle(430, yOffset + 8, 60, 30, UIStyle.PALETTE.STATUS_OK.bg).setInteractive({ useHandCursor: true });
+            const acceptText = this.add.text(430, yOffset + 8, 'ACEITAR', { fontFamily: 'Courier New, monospace', fontSize: 9, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
 
-            acceptBtn.on('pointerover', () => acceptBtn.setFillStyle(0x00ff00));
-            acceptBtn.on('pointerout', () => acceptBtn.setFillStyle(0x00cc00));
+            acceptBtn.on('pointerover', () => acceptBtn.setFillStyle(UIStyle.PALETTE.STATUS_OK.hover));
+            acceptBtn.on('pointerout', () => acceptBtn.setFillStyle(UIStyle.PALETTE.STATUS_OK.bg));
             acceptBtn.on('pointerdown', () => {
                 // Accept this contract
                 if (this.marketShipId) {
@@ -368,60 +441,90 @@ export class UIScene extends Scene {
     }
 
     private createShipyardPanel() {
-        this.shipyardPanel = this.add.container(GameConfig.WIDTH / 2 - 200, GameConfig.HEIGHT / 2 - 150);
+        // Use UIFactory to create shipyard panel
+        this.shipyardPanel = UIFactory.createPanel(
+            this,
+            GameConfig.WIDTH / 2 - 200,
+            GameConfig.HEIGHT / 2 - 150,
+            400,
+            300,
+            'ESTALEIRO',
+            'warning'
+        );
 
-        const bg = this.add.rectangle(0, 0, 400, 300, 0x0b1d3a, 0.95).setOrigin(0, 0);
-        bg.setStrokeStyle(2, 0xffaa00);
-
-        const title = this.add.text(200, 15, 'ESTALEIRO', { fontFamily: 'Courier New, monospace', fontSize: 18, color: '#ffaa00' }).setOrigin(0.5, 0.5);
-
-        const headerLine = this.add.line(0, 40, 10, 40, 390, 40, 0xffaa00, 0.3);
-
-        this.shipyardPanel.add([bg, title, headerLine]);
+        // Add header divider (local coordinates)
+        const headerLine = UIFactory.createDivider(
+            this,
+            10,
+            40,
+            390 - 20,
+            UIStyle.PALETTE.PRIMARY_ORANGE as any
+        );
+        this.shipyardPanel.add(headerLine);
 
         // Ship 1: Cargueiro Padrão
-        const ship1Text = this.add.text(20, 60, 
+        const ship1Text = UIFactory.createText(
+            this,
+            20,
+            60,
             'Cargueiro Padrão\nCapacidade: 2000 u\nVelocidade: 1.0x\nPreço: ¢5000',
-            { fontFamily: 'Courier New, monospace', fontSize: 11, color: '#ffffff', lineSpacing: 3 }
+            'body_text'
         );
-        const buyBtn1 = this.add.rectangle(330, 85, 60, 30, 0xffaa00).setInteractive({ useHandCursor: true });
-        const buyText1 = this.add.text(330, 85, 'COMPRAR', { fontFamily: 'Courier New, monospace', fontSize: 9, color: '#000' }).setOrigin(0.5, 0.5);
+        ship1Text.setOrigin(0, 0);
+        this.shipyardPanel.add(ship1Text);
 
-        buyBtn1.on('pointerover', () => buyBtn1.setFillStyle(0xffcc00));
-        buyBtn1.on('pointerout', () => buyBtn1.setFillStyle(0xffaa00));
-        buyBtn1.on('pointerdown', () => {
-            EventBus.emit('log-event', 'Processando compra de Cargueiro...');
-            EventBus.emit('request-buy-ship', 'BASIC_CARGO', 5000);
-            this.shipyardPanel.setVisible(false);
-        });
+        const buyBtn1 = UIFactory.createButton(
+            this,
+            330,
+            85,
+            'COMPRAR',
+            'warning',
+            () => {
+                EventBus.emit('log-event', 'Processando compra de Cargueiro...');
+                EventBus.emit('request-buy-ship', 'BASIC_CARGO', 5000);
+                this.shipyardPanel.setVisible(false);
+            }
+        );
+        this.shipyardPanel.add(buyBtn1);
 
         // Ship 2: Transporte Rápido
-        const ship2Text = this.add.text(20, 140,
+        const ship2Text = UIFactory.createText(
+            this,
+            20,
+            140,
             'Transporte Rápido\nCapacidade: 5000 u\nVelocidade: 1.5x\nPreço: ¢8000',
-            { fontFamily: 'Courier New, monospace', fontSize: 11, color: '#ffffff', lineSpacing: 3 }
+            'body_text'
         );
-        const buyBtn2 = this.add.rectangle(330, 165, 60, 30, 0xffaa00).setInteractive({ useHandCursor: true });
-        const buyText2 = this.add.text(330, 165, 'COMPRAR', { fontFamily: 'Courier New, monospace', fontSize: 9, color: '#000' }).setOrigin(0.5, 0.5);
+        ship2Text.setOrigin(0, 0);
+        this.shipyardPanel.add(ship2Text);
 
-        buyBtn2.on('pointerover', () => buyBtn2.setFillStyle(0xffcc00));
-        buyBtn2.on('pointerout', () => buyBtn2.setFillStyle(0xffaa00));
-        buyBtn2.on('pointerdown', () => {
-            EventBus.emit('log-event', 'Processando compra de Fragata...');
-            EventBus.emit('request-buy-ship', 'ADVANCED_FRIGATE', 8000);
-            this.shipyardPanel.setVisible(false);
-        });
+        const buyBtn2 = UIFactory.createButton(
+            this,
+            330,
+            165,
+            'COMPRAR',
+            'warning',
+            () => {
+                EventBus.emit('log-event', 'Processando compra de Fragata...');
+                EventBus.emit('request-buy-ship', 'ADVANCED_FRIGATE', 8000);
+                this.shipyardPanel.setVisible(false);
+            }
+        );
+        this.shipyardPanel.add(buyBtn2);
 
-        // Close button
-        const closeBtn = this.add.rectangle(200, 260, 100, 30, 0xff3333).setInteractive({ useHandCursor: true });
-        const closeText = this.add.text(200, 260, 'FECHAR', { fontFamily: 'Courier New, monospace', fontSize: 12, color: '#fff' }).setOrigin(0.5, 0.5);
+        // Close button (error type for close action)
+        const closeBtn = UIFactory.createButton(
+            this,
+            200,
+            260,
+            'FECHAR',
+            'error',
+            () => {
+                this.shipyardPanel.setVisible(false);
+            }
+        );
+        this.shipyardPanel.add(closeBtn);
 
-        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0xff5555));
-        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0xff3333));
-        closeBtn.on('pointerdown', () => {
-            this.shipyardPanel.setVisible(false);
-        });
-
-        this.shipyardPanel.add([ship1Text, buyBtn1, buyText1, ship2Text, buyBtn2, buyText2, closeBtn, closeText]);
         this.shipyardPanel.setVisible(false);
         this.shipyardPanel.setScale(0);
     }
@@ -436,10 +539,6 @@ export class UIScene extends Scene {
 
         let yOffset = 50;
         for (const ship of this.company.fleet) {
-            // Status visual indicator: show [ATIVO] if this ship is selected
-            const statusIndicator = this.activeShipId === ship.id ? ' [ATIVO]' : '';
-            const shipTextColor = this.activeShipId === ship.id ? '#00ff00' : '#ffffff';
-
             const localId = ship.currentLocation?.source_id ?? 'N/A';
             
             const shipInfoText = this.add.text(15, yOffset, 
@@ -448,22 +547,22 @@ export class UIScene extends Scene {
             );
 
             // SELECT button 
-            const selectBtn = this.add.rectangle(155, yOffset + 25, 50, 25, 0x0099ff).setInteractive({ useHandCursor: true });
-            const selectText = this.add.text(155, yOffset + 25, 'SEL', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#000' }).setOrigin(0.5, 0.5);
+            const selectBtn = this.add.rectangle(155, yOffset + 25, 50, 25, UIStyle.PALETTE.STATUS_INFO.bg).setInteractive({ useHandCursor: true });
+            const selectText = this.add.text(155, yOffset + 25, 'SEL', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
 
-            selectBtn.on('pointerover', () => selectBtn.setFillStyle(0x00ccff));
-            selectBtn.on('pointerout', () => selectBtn.setFillStyle(0x0099ff));
+            selectBtn.on('pointerover', () => selectBtn.setFillStyle(UIStyle.PALETTE.STATUS_INFO.hover));
+            selectBtn.on('pointerout', () => selectBtn.setFillStyle(UIStyle.PALETTE.STATUS_INFO.bg));
             selectBtn.on('pointerdown', () => {
                 this.activeShipId = ship.id;
                 this.updateFleetPanel(); // Refresh to show visual indicator
             });
 
             // MERCADO button 
-            const marketBtn = this.add.rectangle(200, yOffset + 25, 50, 25, 0xaa00aa).setInteractive({ useHandCursor: true });
-            const marketText = this.add.text(200, yOffset + 25, 'MRC', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#000' }).setOrigin(0.5, 0.5);
+            const marketBtn = this.add.rectangle(200, yOffset + 25, 50, 25, UIStyle.PALETTE.MARKET_ACCENT as any).setInteractive({ useHandCursor: true });
+            const marketText = this.add.text(200, yOffset + 25, 'MRC', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
 
-            marketBtn.on('pointerover', () => marketBtn.setFillStyle(0xff00ff));
-            marketBtn.on('pointerout', () => marketBtn.setFillStyle(0xaa00aa));
+            marketBtn.on('pointerover', () => marketBtn.setFillStyle(UIStyle.PALETTE.WARNING.hover));
+            marketBtn.on('pointerout', () => marketBtn.setFillStyle(UIStyle.PALETTE.MARKET_ACCENT as any));
             marketBtn.on('pointerdown', () => {
                 if (ship.status !== 'IDLE') {
                     EventBus.emit('log-event', 'ERRO: A nave precisa estar parada para acessar o mercado.');
@@ -473,17 +572,134 @@ export class UIScene extends Scene {
             });
 
             // FUEL button
-            const refuelBtn = this.add.rectangle(245, yOffset + 25, 50, 25, 0x00aa00).setInteractive({ useHandCursor: true });
-            const refuelText = this.add.text(245, yOffset + 25, 'FUEL', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#000' }).setOrigin(0.5, 0.5);
+            const refuelBtn = this.add.rectangle(245, yOffset + 25, 50, 25, UIStyle.PALETTE.SUCCESS.bg as any).setInteractive({ useHandCursor: true });
+            const refuelText = this.add.text(245, yOffset + 25, 'FUEL', { fontFamily: 'Courier New, monospace', fontSize: 10, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
 
-            refuelBtn.on('pointerover', () => refuelBtn.setFillStyle(0x00ff00));
-            refuelBtn.on('pointerout', () => refuelBtn.setFillStyle(0x00aa00));
+            refuelBtn.on('pointerover', () => refuelBtn.setFillStyle(UIStyle.PALETTE.SUCCESS.hover as any));
+            refuelBtn.on('pointerout', () => refuelBtn.setFillStyle(UIStyle.PALETTE.SUCCESS.bg as any));
             refuelBtn.on('pointerdown', () => {
-                EventBus.emit('buy-fuel', { shipId: ship.id, amount: 50 });
+                if (ship.status !== 'IDLE') {
+                    EventBus.emit('log-event', 'ERRO: A nave deve estar parada para reabastecer.');
+                    return;
+                }
+                if (!ship.currentLocation?.hasStation) {
+                    EventBus.emit('log-event', `ERRO: O sistema não possui Estação de Reabastecimento!`);
+                    return;
+                }
+                
+                const fuelNeeded = ship.maxFuel - ship.currentFuel;
+                if (fuelNeeded <= 0) {
+                    EventBus.emit('log-event', 'O tanque já está cheio.');
+                    return;
+                }
+                
+                // Tenta comprar. Se a Company tiver créditos, o buyFuel retorna true.
+                if (this.company!.buyFuel(ship.id, fuelNeeded)) {
+                    this.updateFleetPanel(); // Atualiza os números na tela
+                }
             });
 
             this.fleetPanel.add([shipInfoText, selectBtn, selectText, marketBtn, marketText, refuelBtn, refuelText]);
             yOffset += 80;
         }
+    }
+    private createRankingPanel() {
+        // Use UIFactory to create ranking panel
+        this.rankingPanel = UIFactory.createPanel(
+            this,
+            GameConfig.WIDTH / 2 - 250,
+            GameConfig.HEIGHT / 2 - 150,
+            500,
+            300,
+            'RANKING GALÁCTICO',
+            'warning'
+        );
+        this.rankingPanel.setDepth(100);
+
+        // Add close button (error type styled button)
+        const closeBtn = UIFactory.createButton(
+            this,
+            470,
+            20,
+            '[X]',
+            'error',
+            () => this.rankingPanel.setVisible(false)
+        );
+        this.rankingPanel.add(closeBtn);
+
+        // Add ranking text
+        this.rankingListText = UIFactory.createText(
+            this,
+            20,
+            60,
+            '',
+            'body_text'
+        );
+        this.rankingListText.setOrigin(0, 0);
+        this.rankingPanel.add(this.rankingListText);
+
+        this.rankingPanel.setVisible(false);
+
+        // Escuta a resposta do Game.ts e atualiza o texto
+        EventBus.on('receive-ranking', (data: any[]) => {
+            let text = "POS | EMPRESA              | REP | CRÉDITOS\n";
+            text += "-----------------------------------------------\n";
+            data.forEach((comp, index) => {
+                const prefix = comp.isPlayer ? "-> " : "   ";
+                const name = comp.name.padEnd(20, ' ').substring(0, 20);
+                text += `${(index + 1).toString().padEnd(3, ' ')} | ${prefix}${name} | ${comp.rep.toString().padEnd(3, ' ')} | ¢${comp.cred.toLocaleString()}\n`;
+            });
+            this.rankingListText.setText(text);
+            this.rankingPanel.setVisible(true);
+        });
+    }
+    private createEventModal() {
+        this.eventModal = this.add.container(GameConfig.WIDTH / 2, GameConfig.HEIGHT / 2);
+        this.eventModal.setDepth(200);
+
+        const modalStyle = UIStyle.PALETTE.EVENT_MODAL as any;
+        const bg = this.add.rectangle(0, 0, 500, 300, modalStyle.bg, 0.95).setStrokeStyle(3, modalStyle.border);
+        this.eventTitleText = this.add.text(0, -120, '', { fontFamily: 'Courier New, monospace', fontSize: 22, color: '#ff4444', fontStyle: 'bold' }).setOrigin(0.5, 0.5);
+        this.eventDescText = this.add.text(0, -50, '', { fontFamily: 'Courier New, monospace', fontSize: 14, color: '#ffffff', wordWrap: { width: 460 }, align: 'center' }).setOrigin(0.5, 0.5);
+
+        this.eventModal.add([bg, this.eventTitleText, this.eventDescText]);
+        this.eventModal.setVisible(false);
+
+        EventBus.on('trigger-interactive-event', (data: any) => {
+            this.eventTitleText.setText(data.title);
+            this.eventDescText.setText(data.description);
+
+            // Limpa os botões antigos
+            this.eventButtons.forEach(btn => btn.destroy());
+            this.eventButtons = [];
+
+            // Cria novos botões baseados nas escolhas com UIFactory
+            let startY = 30;
+            data.choices.forEach((choice: any) => {
+                const btnContainer = this.add.container(0, startY);
+                
+                // Use UIFactory for event buttons (modal type)
+                const colors = { DEFAULT: { bg: UIStyle.PALETTE.MODAL_BG, text: '#ffffff' }, HOVER: { bg: UIStyle.PALETTE.MODAL_HOVER, text: '#ffffff' } };
+                const btnBg = this.add.rectangle(0, 0, 400, 40, colors.DEFAULT.bg as any).setInteractive({ useHandCursor: true });
+                const btnText = this.add.text(0, 0, choice.label, UIStyle.TYPOGRAPHY.PRESET.BUTTON_TEXT as any).setOrigin(0.5, 0.5);
+                
+                btnBg.on('pointerover', () => btnBg.setFillStyle(colors.HOVER.bg as any));
+                btnBg.on('pointerout', () => btnBg.setFillStyle(colors.DEFAULT.bg as any));
+                btnBg.on('pointerdown', () => {
+                    choice.action(); // Execute logic
+                    this.eventModal.setVisible(false);
+                    EventBus.emit('time-play'); // Unpause game
+                    btnBg.setFillStyle(colors.DEFAULT.bg);
+                });
+
+                btnContainer.add([btnBg, btnText]);
+                this.eventModal.add(btnContainer);
+                this.eventButtons.push(btnContainer);
+                
+                startY += 55;
+            });
+
+            this.eventModal.setVisible(true);
+        });
     }
 }

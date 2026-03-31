@@ -1,10 +1,6 @@
 import { Star, Universe } from './Universe';
 
-interface DijkstraNode {
-    star: Star;
-    distance: number;
-    previous: Star | null;
-}
+
 
 export class RoutePlanner {
     /**
@@ -86,7 +82,7 @@ export class RoutePlanner {
      * Reconstruct the path from target back to start using the previous map
      */
     private static reconstructPath(
-        universe: Universe,
+        _universe: Universe,
         startStar: Star,
         targetStar: Star,
         previous: Map<number, Star | null>

@@ -35,6 +35,7 @@ export class TimeManager {
             this.daysSinceLastEventCheck++;
 
             EventBus.emit('update-day', this.day);
+            EventBus.emit('daily-ai-tick');
 
             // Process daily fleet logic if company is provided
             if (company) {
