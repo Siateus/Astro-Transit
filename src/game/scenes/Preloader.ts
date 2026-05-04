@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { buildPreloaderLayout } from './PreloaderLayout';
 
 export class Preloader extends Scene {
     private readonly uiAssets = [
@@ -18,12 +19,16 @@ export class Preloader extends Scene {
     }
 
     init() {
-        //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(512, 384, 'background');
+        const layout = buildPreloaderLayout(this.scale.width, this.scale.height);
 
-        const frame = this.add.rectangle(512, 384, 468, 32, 0x041116, 0.72).setStrokeStyle(2, 0x53d6c9, 0.9);
-        const bar = this.add.rectangle(512 - 230, 384, 4, 22, 0x53d6c9, 0.95).setOrigin(0, 0.5);
-        const loadingLabel = this.add.text(512, 346, 'Carregando interface orbital', {
+        //  We loaded this image in our Boot Scene, so we can display it here
+        this.add.image(layout.centerX, layout.centerY, 'background')
+            .setDisplaySize(layout.backgroundDisplayWidth, layout.backgroundDisplayHeight);
+
+        this.add.rectangle(layout.centerX, layout.centerY, layout.barWidth, layout.barHeight, 0x041116, 0.72)
+            .setStrokeStyle(2, 0x53d6c9, 0.9);
+        const bar = this.add.rectangle(layout.barStartX, layout.centerY, 4, 22, 0x53d6c9, 0.95).setOrigin(0, 0.5);
+        this.add.text(layout.centerX, layout.titleY, 'Carregando interface orbital', {
             fontFamily: 'Trebuchet MS, sans-serif',
             fontSize: '22px',
             color: '#d9fffa',
@@ -31,7 +36,7 @@ export class Preloader extends Scene {
             strokeThickness: 4
         }).setOrigin(0.5);
 
-        const percentLabel = this.add.text(512, 418, '0%', {
+        const percentLabel = this.add.text(layout.centerX, layout.percentY, '0%', {
             fontFamily: 'Trebuchet MS, sans-serif',
             fontSize: '16px',
             color: '#8fe9d1'
@@ -40,8 +45,8 @@ export class Preloader extends Scene {
         //  Use the 'progress' event emitted by the LoaderPlugin to update the loading bar
         this.load.on('progress', (progress: number) => {
 
-            //  Update the progress bar (our bar is 464px wide, so 100% = 464px)
-            bar.width = 4 + (460 * progress);
+            //  Update the progress bar based on the responsive bar width.
+            bar.width = 4 + (layout.barInnerWidth * progress);
             percentLabel.setText(`${Math.round(progress * 100)}%`);
 
         });
@@ -53,7 +58,6 @@ export class Preloader extends Scene {
         //  Load the assets for the game - Replace with your own assets
         this.load.setPath('assets');
 
-        this.load.image('logo', 'logo.png');
         this.load.image('star', 'star.png');
         this.load.image('time-rewind', 'fast backward.png');
         this.load.image('time-pause', 'pause.png');

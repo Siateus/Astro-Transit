@@ -1,24 +1,35 @@
 import Phaser from "phaser";
-import { CompanyState, Contract } from "../types/AstroTransit";
-import { Star } from "../types/MapData";
-import { Region } from "../models/Region";
+import { HUD_CONTRACT_ROW_COUNT, HUD_LAYOUT, HUD_PANEL_BOUNDS } from "./OperationsHudLayout";
+import { OperationsHudViewModel } from "../view-models/OperationsHudViewModel";
 
 interface ContractRow {
   container: Phaser.GameObjects.Container;
   button: Phaser.GameObjects.Image;
   actionLabel: Phaser.GameObjects.Text;
+  contractId: string | null;
   text: Phaser.GameObjects.Text;
+}
+
+interface FleetRow {
+  container: Phaser.GameObjects.Container;
+  button: Phaser.GameObjects.Image;
+  actionLabel: Phaser.GameObjects.Text;
+  shipId: string | null;
+  nameText: Phaser.GameObjects.Text;
+  detailsText: Phaser.GameObjects.Text;
+  canRepair: boolean;
+}
+
+interface TimeControlButton {
+  bg: Phaser.GameObjects.Image;
+  icon: Phaser.GameObjects.Image;
+  label?: Phaser.GameObjects.Text;
+  multiplicador: number;
 }
 
 export class OperationsHudRenderer {
   private readonly scene: Phaser.Scene;
   private readonly root: Phaser.GameObjects.Container;
-  private readonly panelBounds = {
-    overview: { x: 12, y: 68, width: 320, height: 148 },
-    system: { x: 676, y: 68, width: 336, height: 280 },
-    fleet: { x: 676, y: 364, width: 336, height: 160 },
-    log: { x: 12, y: 586, width: 470, height: 170 }
-  };
   private readonly topBarEmpireText: Phaser.GameObjects.Text;
   private readonly topBarDateText: Phaser.GameObjects.Text;
   private readonly topBarCreditsText: Phaser.GameObjects.Text;
@@ -34,6 +45,10 @@ export class OperationsHudRenderer {
   private readonly logText: Phaser.GameObjects.Text;
   private readonly arisText: Phaser.GameObjects.Text;
   private readonly contractRows: ContractRow[] = [];
+  private readonly fleetRows: FleetRow[] = [];
+  private readonly timeControlButtons: TimeControlButton[] = [];
+  private onDispatch: (contractId: string) => void = () => undefined;
+  private onRepair: (shipId: string) => void = () => undefined;
 
   constructor(scene: Phaser.Scene, root: Phaser.GameObjects.Container) {
     this.scene = scene;
@@ -53,18 +68,18 @@ export class OperationsHudRenderer {
     this.createPanel("fleet", "ui-main-panel-compact");
     this.createPanel("log", "ui-main-panel-compact");
 
-    this.createPanelTitle("Visao da Operacao", 24, 78, "ui-title-panel-compact", 183, 20);
-    this.createPanelTitle("Sistema em Foco", scene.scale.width - 338, 78, "ui-title-panel-wide", 318, 20);
-    this.createPanelTitle("Frota", scene.scale.width - 338, 374, "ui-title-panel-compact", 183, 20);
-    this.createPanelTitle("Registro de Bordo", 24, scene.scale.height - 172, "ui-title-panel-wide", 318, 20);
+    this.createPanelTitle(HUD_LAYOUT.overviewTitle.text, HUD_LAYOUT.overviewTitle.x, HUD_LAYOUT.overviewTitle.y, "ui-title-panel-compact", HUD_LAYOUT.overviewTitle.width, HUD_LAYOUT.overviewTitle.height);
+    this.createPanelTitle(HUD_LAYOUT.systemTitle.text, HUD_LAYOUT.systemTitle.x, HUD_LAYOUT.systemTitle.y, "ui-title-panel-wide", HUD_LAYOUT.systemTitle.width, HUD_LAYOUT.systemTitle.height);
+    this.createPanelTitle(HUD_LAYOUT.fleetTitle.text, HUD_LAYOUT.fleetTitle.x, HUD_LAYOUT.fleetTitle.y, "ui-title-panel-compact", HUD_LAYOUT.fleetTitle.width, HUD_LAYOUT.fleetTitle.height);
+    this.createPanelTitle(HUD_LAYOUT.logTitle.text, HUD_LAYOUT.logTitle.x, HUD_LAYOUT.logTitle.y, "ui-title-panel-wide", HUD_LAYOUT.logTitle.width, HUD_LAYOUT.logTitle.height);
 
-    this.overviewText = this.makeText(26, 104, 12, "#d8fffb", 280).setLineSpacing(2);
-    this.alertsText = this.makeText(26, 168, 11, "#ffbf82", 280);
-    this.systemTitle = this.makeText(scene.scale.width - 332, 104, 16, "#d6f6f0", 294);
-    this.systemBody = this.makeText(scene.scale.width - 332, 134, 12, "#cfe9e5", 294);
-    this.fleetText = this.makeText(scene.scale.width - 332, 404, 12, "#d4ece8", 294);
-    this.logText = this.makeText(24, scene.scale.height - 142, 12, "#c0d8d4", 430);
-    this.arisText = this.makeText(scene.scale.width - 332, 494, 11, "#8fe9d1", 294);
+    this.overviewText = this.makeText(HUD_LAYOUT.overviewText.x, HUD_LAYOUT.overviewText.y, HUD_LAYOUT.overviewText.size, "#d8fffb", HUD_LAYOUT.overviewText.width).setLineSpacing(2);
+    this.alertsText = this.makeText(HUD_LAYOUT.alertsText.x, HUD_LAYOUT.alertsText.y, HUD_LAYOUT.alertsText.size, "#ffbf82", HUD_LAYOUT.alertsText.width);
+    this.systemTitle = this.makeText(HUD_LAYOUT.systemText.x, HUD_LAYOUT.systemText.titleY, 16, "#d6f6f0", HUD_LAYOUT.systemText.width);
+    this.systemBody = this.makeText(HUD_LAYOUT.systemText.x, HUD_LAYOUT.systemText.bodyY, 12, "#cfe9e5", HUD_LAYOUT.systemText.width);
+    this.fleetText = this.makeText(HUD_LAYOUT.fleetText.x, HUD_LAYOUT.fleetText.y, 12, "#d4ece8", HUD_LAYOUT.fleetText.width);
+    this.logText = this.makeText(HUD_LAYOUT.logTextX, HUD_LAYOUT.logTextY, 12, "#c0d8d4", HUD_LAYOUT.logTextWidth);
+    this.arisText = this.makeText(HUD_LAYOUT.arisText.x, HUD_LAYOUT.arisText.y, 11, "#8fe9d1", HUD_LAYOUT.arisText.width);
 
     root.add([
       this.overviewText,
@@ -76,89 +91,85 @@ export class OperationsHudRenderer {
       this.arisText
     ]);
 
-    for (let index = 0; index < 4; index += 1) {
-      const y = 192 + (index * 42);
-      const row = this.createContractRow(scene.scale.width - 332, y);
+    for (let index = 0; index < HUD_CONTRACT_ROW_COUNT; index += 1) {
+      const y = HUD_LAYOUT.contractRowStartY + (index * HUD_LAYOUT.contractRowGap);
+      const row = this.createContractRow(HUD_LAYOUT.contractRowX, y);
       this.contractRows.push(row);
+      root.add(row.container);
+    }
+
+    for (let index = 0; index < 3; index += 1) {
+      const y = HUD_LAYOUT.fleetText.y + (index * 30);
+      const row = this.createFleetRow(HUD_LAYOUT.fleetText.x, y);
+      this.fleetRows.push(row);
       root.add(row.container);
     }
   }
 
   render(
-    state: CompanyState,
-    selectedStar: Star | null,
-    selectedRegion: Region | null,
-    contracts: Contract[],
-    starsById: Map<number, Star>,
-    regionsById: Map<string, Region>,
-    onDispatch: (contractId: string) => void
+    viewModel: OperationsHudViewModel,
+    onDispatch: (contractId: string) => void,
+    onRepair: (shipId: string) => void
   ) {
-    this.topBarEmpireText.setText("Astro Transit Directorate");
-    this.topBarDateText.setText(`D${state.currentDay} . T${state.currentTick}`);
-    this.topBarCreditsText.setText(formatCompactNumber(state.credits));
-    this.topBarReputationText.setText(`${state.reputation}`);
-    this.topBarFleetText.setText(`${state.fleet.length}`);
-    this.topBarContractsText.setText(`${state.activeContracts.length}`);
-    this.topBarStatusText.setText(state.alerts.length > 0 ? `${state.alerts.length} alertas` : "Estavel");
+    this.onDispatch = onDispatch;
+    this.onRepair = onRepair;
+    this.topBarEmpireText.setText(viewModel.topBar.empire);
+    this.topBarDateText.setText(viewModel.topBar.date);
+    this.topBarCreditsText.setText(viewModel.topBar.credits);
+    this.topBarReputationText.setText(viewModel.topBar.reputation);
+    this.topBarFleetText.setText(viewModel.topBar.fleet);
+    this.topBarContractsText.setText(viewModel.topBar.contracts);
+    this.topBarStatusText.setText(viewModel.topBar.status);
 
-    this.overviewText.setText([
-      `Dia ${state.currentDay}  |  Tick ${state.currentTick}`,
-      `Créditos: ${state.credits}`,
-      `Reputação: ${state.reputation}`,
-      `Frota ativa: ${state.fleet.length}`,
-      `Contratos ativos: ${state.activeContracts.length}`
-    ]);
+    this.overviewText.setText(viewModel.overviewLines);
 
-    this.alertsText.setText(state.alerts.length > 0 ? state.alerts.join(" | ") : "Status nominal. Nenhum alerta crítico.");
+    this.alertsText.setText(viewModel.alertsText);
     this.alertsText.setPosition(this.overviewText.x, this.overviewText.y + this.overviewText.height + 8);
-
-    if (selectedStar) {
-      this.systemTitle.setText(selectedStar.name ?? `Sistema ${selectedStar.id}`);
-      this.systemBody.setText([
-        `ID: ${selectedStar.id} | Regiao: ${selectedRegion?.name ?? "Nao mapeada"}`,
-        `Coordenadas: ${selectedStar.x.toFixed(0)}, ${selectedStar.y.toFixed(0)}`,
-        `Perigo: ${formatPercent(selectedRegion?.stats.danger)} | Pirataria: ${formatPercent(selectedRegion?.stats.piracy)}`,
-        `Taxa: ${formatPercent(selectedRegion?.stats.tax)} | Seguranca: ${formatPercent(selectedRegion?.stats.security)}`,
-        `Contratos locais: ${contracts.length}`
-      ]);
-    } else {
-      this.systemTitle.setText("Nenhum sistema selecionado");
-      this.systemBody.setText("Selecione um sistema no mapa para ver contratos e despachar uma nave.");
-    }
+    this.systemTitle.setText(viewModel.systemTitle);
+    this.systemBody.setText(viewModel.systemBodyLines);
 
     this.contractRows.forEach((row, index) => {
-      const contract = contracts[index];
-      if (!selectedStar || !contract) {
+      const contract = viewModel.contracts[index];
+      if (!contract) {
+        row.contractId = null;
         row.container.setVisible(false);
         return;
       }
 
       row.container.setVisible(true);
-      const destinationRegion = contract.destinationRegionId ? regionsById.get(contract.destinationRegionId) : undefined;
+      row.contractId = contract.id;
       row.text.setText([
-        `${starsById.get(contract.originStarId)?.name} -> ${starsById.get(contract.destinationStarId)?.name}`,
-        `${destinationRegion?.name ?? "Regiao ?"} | Risco ${formatPercent(contract.risk)} | Taxa ${contract.routeTax ?? 0} | ${contract.reward}cr D${contract.deadlineDay}`
+        contract.routeLabel,
+        contract.detailsLabel
       ]);
-      row.button.removeAllListeners();
-      row.button.setInteractive({ useHandCursor: true });
-      row.button.on("pointerover", () => row.container.setScale(1.01));
-      row.button.on("pointerout", () => row.container.setScale(1));
-      row.button.on("pointerdown", () => onDispatch(contract.id));
-      row.actionLabel.setText("Despachar");
+      row.actionLabel.setText(contract.actionLabel);
     });
 
-    this.fleetText.setText(state.fleet.map((ship) => {
-      const destination = ship.task ? starsById.get(ship.task.destinationStarId)?.name : "-";
-      const eta = ship.task ? `${ship.task.remainingDays}d` : "-";
-      return `${ship.name} | ${ship.status} | Int ${ship.integrity}% | ETA ${eta} | Dest ${destination}`;
-    }));
+    this.fleetText.setText(viewModel.fleetRows.length > 0 ? [] : viewModel.fleetLines);
+    this.fleetRows.forEach((row, index) => {
+      const ship = viewModel.fleetRows[index];
+      if (!ship) {
+        row.shipId = null;
+        row.canRepair = false;
+        row.container.setVisible(false);
+        return;
+      }
 
-    this.logText.setText(state.logs.slice(-7).map((entry) => `[D${entry.day}] ${entry.message}`));
-    this.arisText.setText(
-      state.arisMessages.length > 0
-        ? `A.R.I.S.: ${state.arisMessages[state.arisMessages.length - 1].message}`
-        : "A.R.I.S. aguardando novas diretrizes."
-    );
+      row.container.setVisible(true);
+      row.shipId = ship.id;
+      row.canRepair = ship.canRepair;
+      row.nameText.setText(ship.name);
+      row.detailsText.setText(ship.detailsLabel);
+      row.actionLabel.setText(ship.actionLabel);
+      row.button.setAlpha(ship.canRepair ? 0.95 : 0.35);
+      row.actionLabel.setAlpha(ship.canRepair ? 1 : 0.45);
+      row.button.disableInteractive();
+      if (ship.canRepair) {
+        row.button.setInteractive({ useHandCursor: true });
+      }
+    });
+    this.logText.setText(viewModel.logLines);
+    this.arisText.setText(viewModel.arisText);
   }
 
   setVisible(visible: boolean) {
@@ -169,17 +180,52 @@ export class OperationsHudRenderer {
     const container = this.scene.add.container(0, 0);
     const rowBg = this.scene.add.graphics();
     rowBg.fillStyle(0x08151a, 0.88);
-    rowBg.fillRoundedRect(x, y, 304, 36, 10);
+    rowBg.fillRoundedRect(x, y, HUD_LAYOUT.contractRowWidth, HUD_LAYOUT.contractRowHeight, 10);
 
-    const text = this.makeText(x + 8, y + 5, 10, "#d4ece8", 208);
-    const button = this.scene.add.image(x + 254, y + 18, "ui-button-primary").setDisplaySize(84, 28);
-    const actionLabel = this.scene.add.text(x + 254, y + 18, "Despachar", {
+    const buttonX = x + HUD_LAYOUT.contractRowWidth - (HUD_LAYOUT.contractButtonWidth / 2) - 8;
+    const textWidth = HUD_LAYOUT.contractRowWidth - HUD_LAYOUT.contractButtonWidth - 20;
+    const text = this.makeText(x + 8, y + 5, 10, "#d4ece8", textWidth);
+    const button = this.scene.add.image(buttonX, y + (HUD_LAYOUT.contractRowHeight / 2), "ui-button-primary").setDisplaySize(HUD_LAYOUT.contractButtonWidth, 28);
+    button.setInteractive({ useHandCursor: true });
+    const actionLabel = this.scene.add.text(buttonX, y + (HUD_LAYOUT.contractRowHeight / 2), "Despachar", {
       fontFamily: "Trebuchet MS, sans-serif",
       fontSize: "11px",
       color: "#d8fffb"
     }).setOrigin(0.5);
+    const row: ContractRow = { container, button, actionLabel, contractId: null, text };
+    button.on("pointerover", () => row.container.setScale(1.01));
+    button.on("pointerout", () => row.container.setScale(1));
+    button.on("pointerdown", () => {
+      if (row.contractId) {
+        this.onDispatch(row.contractId);
+      }
+    });
     container.add([rowBg, text, button, actionLabel]);
-    return { container, button, actionLabel, text };
+    return row;
+  }
+
+  private createFleetRow(x: number, y: number): FleetRow {
+    const container = this.scene.add.container(0, 0);
+    const buttonX = x + HUD_LAYOUT.fleetText.width - 34;
+    const nameText = this.makeText(x, y, 11, "#d8fffb", 190);
+    const detailsText = this.makeText(x, y + 13, 9, "#a7c8c3", 220);
+    const button = this.scene.add.image(buttonX, y + 11, "ui-button-primary").setDisplaySize(68, 22);
+    const actionLabel = this.scene.add.text(buttonX, y + 11, "Reparar", {
+      fontFamily: "Trebuchet MS, sans-serif",
+      fontSize: "10px",
+      color: "#d8fffb"
+    }).setOrigin(0.5);
+
+    const row: FleetRow = { container, button, actionLabel, shipId: null, nameText, detailsText, canRepair: false };
+    button.on("pointerover", () => button.setAlpha(1));
+    button.on("pointerout", () => button.setAlpha(row.canRepair ? 0.95 : 0.35));
+    button.on("pointerdown", () => {
+      if (row.shipId) {
+        this.onRepair(row.shipId);
+      }
+    });
+    container.add([nameText, detailsText, button, actionLabel]);
+    return row;
   }
 
   private makeText(x: number, y: number, size: number, color = "#d4ece8", wordWrapWidth = 304) {
@@ -238,10 +284,10 @@ export class OperationsHudRenderer {
       color: "#6dd7cb",
       letterSpacing: 1
     });
-    const rewindButton = this.createTimeControlButton(280, 24, "time-rewind");
-    const pauseButton = this.createTimeControlButton(314, 24, "time-pause");
-    const playButton = this.createTimeControlButton(348, 24, "time-play", true);
-    const fastForwardButton = this.createTimeControlButton(382, 24, "time-fast-forward");
+    const pauseButton = this.createTimeControlButton(280, 24, "time-pause", 0);
+    const playButton = this.createTimeControlButton(314, 24, "time-play", 1, true);
+    const fastForwardButton = this.createTimeControlButton(348, 24, "time-fast-forward", 2, false, "2x");
+    const hyperForwardButton = this.createTimeControlButton(382, 24, "time-fast-forward", 4, false, "4x");
 
     const datePlate = this.createTopBarMetric(454, 14, 82, "DATE", true);
     const creditsPlate = this.createTopBarMetric(544, 14, 114, "ENERGY");
@@ -257,16 +303,16 @@ export class OperationsHudRenderer {
     const contractsText = this.createTopBarText(860, 31, 12, "#d9fffa");
     const statusText = this.createTopBarText(940, 31, 12, "#d9fffa");
 
-    this.root.add([
+    const topBarObjects: Phaser.GameObjects.GameObject[] = [
       empireAccent,
       empirePlate,
       controlDockShadow,
       controlDockFrame,
       controlInset,
-      rewindButton.bg,
       pauseButton.bg,
       playButton.bg,
       fastForwardButton.bg,
+      hyperForwardButton.bg,
       datePlate.plate,
       datePlate.label,
       creditsPlate.plate,
@@ -282,17 +328,27 @@ export class OperationsHudRenderer {
       empireLabel,
       empireText,
       controlLabel,
-      rewindButton.icon,
       pauseButton.icon,
       playButton.icon,
       fastForwardButton.icon,
+      hyperForwardButton.icon,
       dateText,
       creditsText,
       reputationText,
       fleetText,
       contractsText,
       statusText
-    ]);
+    ];
+
+    if (fastForwardButton.label) {
+      topBarObjects.push(fastForwardButton.label);
+    }
+
+    if (hyperForwardButton.label) {
+      topBarObjects.push(hyperForwardButton.label);
+    }
+
+    this.root.add(topBarObjects);
 
     return {
       empire: empireText,
@@ -305,13 +361,64 @@ export class OperationsHudRenderer {
     };
   }
 
-  private createTimeControlButton(x: number, y: number, iconKey: string, active = false) {
+  private createTimeControlButton(
+    x: number,
+    y: number,
+    iconKey: string,
+    multiplicador: number,
+    active = false,
+    label?: string
+  ): TimeControlButton {
     const bg = this.scene.add.image(x, y, active ? "ui-button-bar-active" : "ui-button-bar").setOrigin(0, 0);
     bg.setDisplaySize(26, 18).setAlpha(active ? 1 : 0.85);
     const icon = this.scene.add.image(x + 13, y + 9, iconKey).setDisplaySize(12, 12);
     icon.setAlpha(active ? 1 : 0.92);
+    const labelText = label
+      ? this.scene.add.text(x + 19, y + 10, label, {
+        fontFamily: "Trebuchet MS, sans-serif",
+        fontSize: "7px",
+        color: "#d8fffb"
+      }).setOrigin(0.5)
+      : undefined;
 
-    return { bg, icon };
+    const button: TimeControlButton = { bg, icon, label: labelText, multiplicador };
+    this.timeControlButtons.push(button);
+
+    [bg, icon, labelText].forEach((target) => {
+      if (!target) {
+        return;
+      }
+
+      target.setInteractive({ useHandCursor: true });
+      target.on("pointerover", () => bg.setAlpha(1));
+      target.on("pointerout", () => {
+        if (!this.isTimeControlActive(button)) {
+          bg.setAlpha(0.85);
+        }
+      });
+      target.on("pointerdown", () => this.handleTimeControlClick(button));
+    });
+
+    return button;
+  }
+
+  private handleTimeControlClick(button: TimeControlButton) {
+    const scene = this.scene as Phaser.Scene & { ajustarVelocidade?: (multiplicador: number) => void };
+    scene.ajustarVelocidade?.(button.multiplicador);
+    this.setActiveTimeControl(button.multiplicador);
+  }
+
+  private setActiveTimeControl(multiplicador: number) {
+    this.timeControlButtons.forEach((button) => {
+      const active = button.multiplicador === multiplicador;
+      button.bg.setTexture(active ? "ui-button-bar-active" : "ui-button-bar").setAlpha(active ? 1 : 0.85);
+      button.icon.setAlpha(active ? 1 : 0.92);
+      button.label?.setAlpha(active ? 1 : 0.82);
+    });
+  }
+
+  private isTimeControlActive(button: TimeControlButton) {
+    return button.bg.texture.key === "ui-button-bar-active";
   }
 
   private createTopBarMetric(x: number, y: number, width: number, label: string, active = false) {
@@ -335,8 +442,8 @@ export class OperationsHudRenderer {
     });
   }
 
-  private createPanel(panelKey: keyof OperationsHudRenderer["panelBounds"], texture: string) {
-    const bounds = this.panelBounds[panelKey];
+  private createPanel(panelKey: keyof typeof HUD_PANEL_BOUNDS, texture: string) {
+    const bounds = HUD_PANEL_BOUNDS[panelKey];
     this.createPanelBackdrop(bounds.x, bounds.y, bounds.width, bounds.height);
     const panel = this.scene.add.image(bounds.x, bounds.y, texture).setOrigin(0, 0).setAlpha(0.96);
     panel.setDisplaySize(bounds.width, bounds.height);
@@ -366,24 +473,4 @@ export class OperationsHudRenderer {
     });
     this.root.add([bar, label]);
   }
-}
-
-function formatPercent(value?: number) {
-  return value === undefined ? "--" : `${Math.round(value * 100)}%`;
-}
-
-function formatCompactNumber(value: number) {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
-  }
-
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
-  }
-
-  return `${value}`;
 }

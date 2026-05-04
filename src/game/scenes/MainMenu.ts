@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { EventBus } from "../EventBus";
+import { buildMainMenuLayout } from "./MainMenuLayout";
 
 interface MenuEntry {
   container: Phaser.GameObjects.Container;
@@ -72,7 +73,9 @@ export class MainMenu extends Phaser.Scene {
   }
 
   private createTitleBlock() {
-    const title = this.add.text(34, 28, "ASTRO TRANSIT", {
+    const layout = buildMainMenuLayout(this.scale.width, this.scale.height);
+
+    const title = this.add.text(layout.titleX, layout.titleY, "ASTRO TRANSIT", {
       fontFamily: "Trebuchet MS, sans-serif",
       fontSize: "58px",
       color: "#f0f6f7",
@@ -80,7 +83,7 @@ export class MainMenu extends Phaser.Scene {
     });
     title.setAlpha(0.96);
 
-    const subtitle = this.add.text(38, 102, "INTERSTELLAR LOGISTICS DIRECTORATE", {
+    const subtitle = this.add.text(layout.subtitleX, layout.subtitleY, "INTERSTELLAR LOGISTICS DIRECTORATE", {
       fontFamily: "Trebuchet MS, sans-serif",
       fontSize: "12px",
       color: "#7aa8ac",
@@ -90,23 +93,28 @@ export class MainMenu extends Phaser.Scene {
   }
 
   private createMenuColumn() {
+    const layout = buildMainMenuLayout(this.scale.width, this.scale.height);
     const items = ["Nova empresa", "Continuar", "Opcoes"];
-    const startX = 40;
-    const startY = 218;
-    const gap = 56;
 
     items.forEach((item, index) => {
-      const y = startY + (index * gap);
-      const label = this.add.text(startX, y, item, {
+      const y = layout.menuStartY + (index * layout.menuGap);
+      const label = this.add.text(layout.menuX, y, item, {
         fontFamily: "Trebuchet MS, sans-serif",
         fontSize: "23px",
         color: index === 0 ? "#e9f8f7" : "#c4d2d4"
       });
       label.setAlpha(index === 0 ? 1 : 0.88);
 
-      const underline = this.add.rectangle(startX, y + 34, index === 0 ? 88 : 0, 2, 0x78dfd3, 0.95).setOrigin(0, 0.5);
+      const underline = this.add.rectangle(layout.menuX, y + layout.underlineOffsetY, index === 0 ? 88 : 0, 2, 0x78dfd3, 0.95).setOrigin(0, 0.5);
 
-      const hit = this.add.rectangle(startX - 12, y - 8, 240, 40, 0x000000, 0.001).setOrigin(0, 0);
+      const hit = this.add.rectangle(
+        layout.hitAreaX,
+        y + layout.hitAreaYOffset,
+        layout.hitAreaWidth,
+        layout.hitAreaHeight,
+        0x000000,
+        0.001
+      ).setOrigin(0, 0);
       hit.setInteractive({ useHandCursor: true });
 
       const container = this.add.container(0, 0, [hit, label, underline]);
@@ -126,7 +134,9 @@ export class MainMenu extends Phaser.Scene {
   }
 
   private createFooterHint() {
-    this.add.text(38, this.scale.height - 64, "Menu conceitual. Background definitivo sera definido depois.", {
+    const layout = buildMainMenuLayout(this.scale.width, this.scale.height);
+
+    this.add.text(layout.footerX, layout.footerY, "Menu conceitual. Background definitivo sera definido depois.", {
       fontFamily: "Trebuchet MS, sans-serif",
       fontSize: "13px",
       color: "#6f8b90"

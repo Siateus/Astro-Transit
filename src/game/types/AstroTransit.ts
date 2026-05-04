@@ -13,6 +13,7 @@ export interface TravelTask {
   destinationStarId: number;
   path: number[];
   totalDistance: number;
+  remainingDistance: number;
   remainingDays: number;
   totalEtaDays: number;
 }
@@ -27,6 +28,7 @@ export interface Ship {
   speed: number;
   maintenanceCost: number;
   operatingCostPerDistance: number;
+  maintenanceDaysRemaining?: number;
   task?: TravelTask;
 }
 
@@ -84,6 +86,7 @@ export interface CompanyState {
   credits: number;
   reputation: number;
   debtDays: number;
+  diasNoVermelho: number;
   fleet: Ship[];
   availableContracts: Contract[];
   activeContracts: Contract[];
@@ -94,5 +97,6 @@ export interface CompanyState {
   tutorialFlags: TutorialFlags;
   alerts: string[];
   gameOver: boolean;
+  fimDeJogo: boolean;
   gameOverReason?: string;
 }

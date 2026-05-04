@@ -1,10 +1,10 @@
 {
-    "name": "template-react-ts",
-    "description": "A Phaser 3 TypeScript project template that demonstrates React communication and uses Vite for bundling.",
+    "name": "astro-transit",
+    "description": "Astro Transit, a Phaser strategy prototype about interstellar logistics.",
     "version": "1.1.0",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/phaserjs/template-react-ts.git"
+        "url": "https://github.com/phaserjs/template-react-ts.git"
     },
     "author": "Phaser Studio <support@phaser.io> (https://phaser.io/)",
     "license": "MIT",
@@ -12,7 +12,7 @@
     "bugs": {
         "url": "https://github.com/phaserjs/template-react-ts/issues"
     },
-    "homepage": "https://github.com/phaserjs/template-react-ts#readme",
+    "homepage": "./",
     "keywords": [
         "phaser",
         "phaser3",
@@ -21,10 +21,8 @@
         "typescript"
     ],
     "scripts": {
-        "dev": "node log.js dev & vite --config vite/config.dev.mjs",
-        "build": "node log.js build & vite build --config vite/config.prod.mjs",
-        "dev-nolog": "vite --config vite/config.dev.mjs",
-        "build-nolog": "vite build --config vite/config.prod.mjs"
+        "dev": "vite --config vite/config.dev.mjs",
+        "build": "vite build --config vite/config.prod.mjs"
     },
     "dependencies": {
         "phaser": "^3.90.0",
