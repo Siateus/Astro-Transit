@@ -6,7 +6,8 @@ export interface MainMenuLayout {
   menuX: number;
   menuStartY: number;
   menuGap: number;
-  underlineOffsetY: number;
+  menuButtonWidth: number;
+  menuButtonHeight: number;
   hitAreaX: number;
   hitAreaYOffset: number;
   hitAreaWidth: number;
@@ -27,11 +28,12 @@ export function buildMainMenuLayout(width: number, height: number): MainMenuLayo
     menuX,
     menuStartY: Math.round(height * 0.31),
     menuGap: Math.round(Math.max(52, height * 0.073)),
-    underlineOffsetY: 34,
-    hitAreaX: menuX - 12,
-    hitAreaYOffset: -8,
-    hitAreaWidth: Math.round(Math.max(240, leftColumnWidth * 0.58)),
-    hitAreaHeight: 40,
+    menuButtonWidth: Math.round(Math.max(260, leftColumnWidth * 0.62)),
+    menuButtonHeight: 42,
+    hitAreaX: menuX,
+    hitAreaYOffset: -21,
+    hitAreaWidth: Math.round(Math.max(260, leftColumnWidth * 0.62)),
+    hitAreaHeight: 42,
     footerX: menuX + 4,
     footerY: height - 64
   };

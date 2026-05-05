@@ -12,37 +12,25 @@ const REGION_BLUEPRINTS: RegionBlueprint[] = [
     id: "core",
     name: "Nucleo Mercantil",
     color: "#69e6d2",
-    stats: { danger: 0.18, piracy: 0.08, tax: 0.22, security: 0.86, logistics: 0.92 }
+    stats: { danger: 0.12, piracy: 0.05, tax: 0.28, security: 0.9, logistics: 0.92 }
   },
   {
     id: "rim",
     name: "Borda Livre",
     color: "#ffb15c",
-    stats: { danger: 0.68, piracy: 0.62, tax: 0.07, security: 0.28, logistics: 0.48 }
-  },
-  {
-    id: "guild",
-    name: "Protetorado da Guilda",
-    color: "#8cc8ff",
-    stats: { danger: 0.32, piracy: 0.16, tax: 0.36, security: 0.78, logistics: 0.84 }
+    stats: { danger: 0.52, piracy: 0.8, tax: 0.06, security: 0.2, logistics: 0.5 }
   },
   {
     id: "frontier",
     name: "Fronteira de Cinzas",
     color: "#ff6f7e",
-    stats: { danger: 0.78, piracy: 0.44, tax: 0.04, security: 0.22, logistics: 0.34 }
-  },
-  {
-    id: "relay",
-    name: "Cintura Relay",
-    color: "#d6f26b",
-    stats: { danger: 0.42, piracy: 0.24, tax: 0.18, security: 0.56, logistics: 0.72 }
+    stats: { danger: 0.82, piracy: 0.42, tax: 0.04, security: 0.24, logistics: 0.25 }
   },
   {
     id: "veil",
     name: "Veu Nebular",
     color: "#bd8cff",
-    stats: { danger: 0.58, piracy: 0.38, tax: 0.12, security: 0.36, logistics: 0.52 }
+    stats: { danger: 0.9, piracy: 0.35, tax: 0.1, security: 0.12, logistics: 0.42 }
   }
 ];
 
@@ -75,8 +63,9 @@ export class Region {
     return (this.stats.danger * 0.45) + (this.stats.piracy * 0.4) - (this.stats.security * 0.18);
   }
 
-  getTaxMultiplier() {
-    return 1 + this.stats.tax;
+  getTaxMultiplier(reputation = 50) {
+    const reputationDiscount = Math.max(-0.18, Math.min(0.18, (reputation - 50) / 280));
+    return Math.max(1, 1 + this.stats.tax - reputationDiscount);
   }
 
   getLogisticsMultiplier() {

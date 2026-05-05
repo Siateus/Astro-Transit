@@ -1,6 +1,8 @@
 import { Contract, Ship, TravelTask } from "../types/AstroTransit";
 import { SimulationLogContext } from "./context";
 import { computeRouteProfile } from "./routing";
+import { pushFinancialRecord } from "./runtime";
+import { getEffectiveShipSpeed } from "./shipStats";
 
 export interface DispatchResult {
   ok: boolean;
@@ -42,15 +44,22 @@ export function dispatchContract(
   }
 
   const totalDistance = navigation.computePathDistance(path);
-  const routeProfile = computeRouteProfile(path, regionLookup);
+  const routeProfile = computeRouteProfile(path, regionLookup, state.regionalReputation);
   const operatingCost = Math.round(totalDistance * ship.operatingCostPerDistance * routeProfile.logisticsMultiplier);
   if (state.credits < operatingCost) {
     return { ok: false, message: "Créditos insuficientes para cobrir os custos operacionais desta viagem." };
   }
 
   state.credits -= operatingCost;
+  pushFinancialRecord(
+    state,
+    "expense",
+    operatingCost,
+    `Custo operacional ${ship.name}: ${getStarName(starLookup, contract.originStarId)} -> ${getStarName(starLookup, contract.destinationStarId)}`,
+    { shipId: ship.id, regionId: routeProfile.originRegionId }
+  );
 
-  const totalEtaDays = Math.max(1, Math.ceil(totalDistance / ship.speed));
+  const totalEtaDays = Math.max(1, Math.ceil(totalDistance / getEffectiveShipSpeed({ ...ship, integrity: 100 })));
   const task: TravelTask = {
     shipId: ship.id,
     contractId: contract.id,

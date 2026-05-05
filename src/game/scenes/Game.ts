@@ -11,7 +11,9 @@ import { MapData } from "../types/MapData";
 import { GameConfig } from "../utils/GameConfig";
 import { UIStyle } from "../utils/UIStyle";
 import { GameSession } from "../session/GameSession";
+import { RoutePreview } from "../session/GameSession";
 import { setupGameSceneVisuals } from "./setupGameSceneVisuals";
+import { GameAssetKeys } from "../utils/GameAssets";
 
 export class Game extends Phaser.Scene {
   private session!: GameSession;
@@ -24,15 +26,23 @@ export class Game extends Phaser.Scene {
   private timerLoop?: Phaser.Time.TimerEvent;
   private intervaloAtual: number = GameConfig.TICK_INTERVAL_MS;
   private transicaoGameOverIniciada = false;
+  private mapMode: "political" | "risk" = "political";
+  private mapModeButton?: Phaser.GameObjects.Image;
+  private mapModeLabel?: Phaser.GameObjects.Text;
+  private routePreview: RoutePreview | null = null;
+  private crisisBanner?: Phaser.GameObjects.Container;
+  private crisisBannerBg?: Phaser.GameObjects.Rectangle;
+  private crisisBannerText?: Phaser.GameObjects.Text;
+  private sosBadge?: Phaser.GameObjects.Container;
 
   constructor() {
     super("Game");
   }
 
-  create() {
+  create(data?: { mode?: "new" | "continue" }) {
     this.cameras.main.setBackgroundColor(UIStyle.PALETTE.BACKGROUND_DEEP_SPACE);
     const rawMapData = this.cache.json.get("mapa") as MapData;
-    this.session = new GameSession(rawMapData);
+    this.session = new GameSession(rawMapData, data?.mode ?? "new");
 
     this.visualConfig = {
       backgroundStarCount: GameConfig.BACKGROUND_STAR_COUNT,
@@ -72,6 +82,8 @@ export class Game extends Phaser.Scene {
 
     this.renderMap(true);
     this.renderHud();
+    this.createMapModeControl();
+    this.createCrisisOverlays();
     this.setupInput();
 
     this.criarTimerLoop();
@@ -103,6 +115,10 @@ export class Game extends Phaser.Scene {
     }
 
     this.interactionController.update(this.input.activePointer, delta);
+    if (this.routePreview) {
+      this.requestMapRender(false);
+    }
+    this.updateCrisisOverlays();
   }
 
   private setupInput() {
@@ -124,6 +140,8 @@ export class Game extends Phaser.Scene {
         this.interactionController.zoom(deltaY);
       }
     );
+
+    this.input.keyboard?.on("keydown-M", () => this.toggleMapMode());
   }
 
   private renderHud() {
@@ -139,15 +157,36 @@ export class Game extends Phaser.Scene {
         this.renderHud();
         this.requestMapRender(true);
       },
-      (shipId) => {
-        const result = this.session.startShipMaintenance(shipId);
+      (shipId, action) => {
+        const selectedStarId = this.interactionController.getSelectedStarId();
+        const result = action === "relocate" && selectedStarId !== null
+          ? this.session.relocateShip(shipId, selectedStarId)
+          : this.session.startShipMaintenance(shipId);
         if (!result.ok) {
           this.session.companyState.alerts = [result.message];
         }
         this.renderHud();
         this.requestMapRender(true);
+      },
+      (contractId) => {
+        this.routePreview = contractId ? this.session.getRoutePreview(contractId) : null;
+        this.requestMapRender(true);
+      },
+      (shipTypeId) => {
+        const selectedStarId = this.interactionController.getSelectedStarId();
+        const result = this.session.purchaseShip(shipTypeId, selectedStarId ?? undefined);
+        if (!result.ok) {
+          this.session.companyState.alerts = [result.message];
+        }
+        this.renderHud();
+        this.requestMapRender(true);
+      },
+      () => {
+        this.session.cycleContractFilter();
+        this.renderHud();
       }
     );
+    this.updateCrisisOverlays();
   }
 
   private renderMap(fullRender: boolean) {
@@ -159,9 +198,20 @@ export class Game extends Phaser.Scene {
       this.session.lookup,
       this.visualConfig.laneAlpha,
       this.visualConfig.laneWidth,
-      zoomRatio
+      zoomRatio,
+      this.mapMode
     );
     this.overlayRenderer.renderShipRoutes(this.session.companyState, this.projectedStars);
+    if (this.routePreview) {
+      this.overlayRenderer.renderRoutePreview(
+        this.routePreview.path,
+        this.routePreview.risk,
+        this.projectedStars,
+        1 + Math.sin(this.time.now / 130)
+      );
+    } else {
+      this.overlayRenderer.renderRoutePreview([], 0, this.projectedStars);
+    }
     this.overlayRenderer.renderShips(this.session.companyState, this.projectedStars);
     this.overlayRenderer.renderFocusLabel(
       this.interactionController.getActiveStarId(),
@@ -194,8 +244,91 @@ export class Game extends Phaser.Scene {
       viewState: this.interactionController.getViewState(),
       glowStrength: this.visualConfig.glowStrength,
       isHighlighted: (starId) => this.interactionController.isHighlighted(starId),
-      lookup: this.session.lookup
+      lookup: this.session.lookup,
+      mapMode: this.mapMode
     });
+  }
+
+  private createMapModeControl() {
+    this.mapModeButton = this.add.image(this.scale.width - 196, 36, GameAssetKeys.uiButtonBar).setOrigin(0, 0).setDisplaySize(168, 22).setDepth(120);
+    this.mapModeLabel = this.add.text(this.scale.width - 112, 47, "", {
+      fontFamily: "Trebuchet MS, sans-serif",
+      fontSize: "10px",
+      color: "#d8fffb"
+    }).setOrigin(0.5).setDepth(121);
+
+    this.mapModeButton.setInteractive({ useHandCursor: true });
+    this.mapModeLabel.setInteractive({ useHandCursor: true });
+    [this.mapModeButton, this.mapModeLabel].forEach((target) => {
+      target.on("pointerdown", () => this.toggleMapMode());
+      target.on("pointerover", () => this.mapModeButton?.setAlpha(1));
+      target.on("pointerout", () => this.mapModeButton?.setAlpha(0.88));
+    });
+
+    this.updateMapModeControl();
+  }
+
+  private toggleMapMode() {
+    this.mapMode = this.mapMode === "political" ? "risk" : "political";
+    this.updateMapModeControl();
+    this.requestMapRender(true);
+  }
+
+  private updateMapModeControl() {
+    this.mapModeButton?.setTexture(this.mapMode === "risk" ? GameAssetKeys.uiButtonBarActive : GameAssetKeys.uiButtonBar).setAlpha(0.88);
+    this.mapModeLabel?.setText(this.mapMode === "risk" ? "CAMADA: RISCO" : "CAMADA: POLITICA");
+  }
+
+  private createCrisisOverlays() {
+    const crisisBg = this.add.rectangle(this.scale.width / 2, 86, this.scale.width - 80, 42, 0x5c1218, 0.86);
+    const crisisText = this.add.text(this.scale.width / 2, 86, "", {
+      fontFamily: "Trebuchet MS, sans-serif",
+      fontSize: "18px",
+      color: "#ffffff"
+    }).setOrigin(0.5);
+    this.crisisBanner = this.add.container(0, 0, [crisisBg, crisisText]).setDepth(130).setVisible(false);
+    this.crisisBannerBg = crisisBg;
+    this.crisisBannerText = crisisText;
+
+    const sosBg = this.add.rectangle(this.scale.width - 68, 92, 88, 32, 0x7b1118, 0.92);
+    const sosText = this.add.text(this.scale.width - 68, 92, "SOS", {
+      fontFamily: "Trebuchet MS, sans-serif",
+      fontSize: "17px",
+      color: "#ffffff",
+      fontStyle: "bold"
+    }).setOrigin(0.5);
+    [sosBg, sosText].forEach((target) => {
+      target.setInteractive({ useHandCursor: true });
+      target.on("pointerdown", () => this.rescueFirstStrandedShip());
+    });
+    this.sosBadge = this.add.container(0, 0, [sosBg, sosText]).setDepth(132).setVisible(false);
+  }
+
+  private updateCrisisOverlays() {
+    const state = this.session.companyState;
+    const hasDebt = state.credits < 0;
+    this.crisisBanner?.setVisible(hasDebt);
+    if (hasDebt) {
+      const remainingDays = Math.max(0, GameConfig.MAX_DEBT_DAYS - state.debtDays);
+      this.crisisBannerText?.setText(`${remainingDays} DIAS PARA O CONFISCO DA FROTA`);
+      this.crisisBannerBg?.setAlpha(0.62 + (Math.sin(this.time.now / 120) * 0.22));
+    }
+
+    this.sosBadge?.setVisible(state.fleet.some((ship) => ship.status === "stranded"));
+  }
+
+  private rescueFirstStrandedShip() {
+    const strandedShip = this.session.companyState.fleet.find((ship) => ship.status === "stranded");
+    if (!strandedShip) {
+      return;
+    }
+
+    const result = this.session.startShipMaintenance(strandedShip.id);
+    if (!result.ok) {
+      this.session.companyState.alerts = [result.message];
+    }
+    this.renderHud();
+    this.requestMapRender(true);
   }
 
   private requestMapRender(fullRender: boolean) {
@@ -229,7 +362,12 @@ export class Game extends Phaser.Scene {
     this.time.removeAllEvents();
     this.input.removeAllListeners();
     this.input.enabled = false;
-    this.scene.start("GameOver", { razao: "Falência Operacional" });
+    this.crisisBanner?.setVisible(true);
+    this.crisisBannerText?.setText("CONFISCO DA FROTA AUTORIZADO");
+    this.cameras.main.fadeOut(900, 120, 0, 16);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.scene.start("GameOver", { razao: "Falência Operacional" });
+    });
     return true;
   }
 }

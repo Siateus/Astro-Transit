@@ -1,19 +1,8 @@
 import { Scene } from 'phaser';
 import { buildPreloaderLayout } from './PreloaderLayout';
+import { GAME_ASSET_MANIFEST, GameAssetKeys } from '../utils/GameAssets';
 
 export class Preloader extends Scene {
-    private readonly uiAssets = [
-        ['ui-main-panel-wide', 'UI/MainPanel01.png'],
-        ['ui-main-panel-tall', 'UI/MainPanel02.png'],
-        ['ui-main-panel-compact', 'UI/MainPanel03.png'],
-        ['ui-title-panel-wide', 'UI/TitlePanel01.png'],
-        ['ui-title-panel-compact', 'UI/TitlePanel02.png'],
-        ['ui-button-primary', 'UI/Button01.png'],
-        ['ui-button-bar', 'UI/Button15.png'],
-        ['ui-button-bar-active', 'UI/Button16.png'],
-        ['ui-grid', 'UI/Grid.png']
-    ] as const;
-
     constructor() {
         super('Preloader');
     }
@@ -22,7 +11,7 @@ export class Preloader extends Scene {
         const layout = buildPreloaderLayout(this.scale.width, this.scale.height);
 
         //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(layout.centerX, layout.centerY, 'background')
+        this.add.image(layout.centerX, layout.centerY, GameAssetKeys.bootBackground)
             .setDisplaySize(layout.backgroundDisplayWidth, layout.backgroundDisplayHeight);
 
         this.add.rectangle(layout.centerX, layout.centerY, layout.barWidth, layout.barHeight, 0x041116, 0.72)
@@ -58,12 +47,7 @@ export class Preloader extends Scene {
         //  Load the assets for the game - Replace with your own assets
         this.load.setPath('assets');
 
-        this.load.image('star', 'star.png');
-        this.load.image('time-rewind', 'fast backward.png');
-        this.load.image('time-pause', 'pause.png');
-        this.load.image('time-play', 'play.png');
-        this.load.image('time-fast-forward', 'fast forward.png');
-        this.uiAssets.forEach(([key, path]) => this.load.image(key, path));
+        GAME_ASSET_MANIFEST.forEach((asset) => this.load.image(asset.key, asset.provisionalPath));
     }
 
     create() {

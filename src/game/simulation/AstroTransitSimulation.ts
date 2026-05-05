@@ -5,6 +5,7 @@ import {
 } from "../types/AstroTransit";
 import { GameConfig } from "../utils/GameConfig";
 import { SimulationContext } from "./context";
+import { computeRouteProfile } from "./routing";
 import {
   dispatchContract as executeDispatchContractInternal,
   DispatchResult
@@ -16,8 +17,10 @@ import {
   runMaintenancePhase,
   runTravelPhase
 } from "./phases";
-import { getStarName, pushArisMessage, pushLog } from "./runtime";
+import { getStarName, pushFinancialRecord, pushLog } from "./runtime";
+import { purchaseShip as purchaseShipInternal, ShipPurchaseResult } from "./shipyard";
 export type { DispatchResult } from "./dispatch";
+export type { ShipPurchaseResult } from "./shipyard";
 
 export interface MaintenanceResult {
   ok: boolean;
@@ -25,19 +28,34 @@ export interface MaintenanceResult {
   ship?: Ship;
 }
 
+export interface RelocationResult {
+  ok: boolean;
+  message: string;
+  ship?: Ship;
+}
+
 export function createInitialCompanyState(mapData: MapData) {
   const startingStars = pickStartingStars(mapData.stars);
-  const fleet: Ship[] = startingStars.map((star, index) => ({
-    id: `ship-${index + 1}`,
-    name: GameConfig.STARTING_SHIPS[index]?.name ?? `Transit-${index + 1}`,
-    currentStarId: star.id,
-    status: "idle",
-    integrity: 100,
-    capacity: GameConfig.STARTING_SHIPS[index]?.capacity ?? 40,
-    speed: GameConfig.STARTING_SHIPS[index]?.speed ?? 360,
-    maintenanceCost: GameConfig.STARTING_SHIPS[index]?.maintenanceCost ?? 45,
-    operatingCostPerDistance: GameConfig.STARTING_SHIPS[index]?.operatingCostPerDistance ?? 0.35
-  }));
+  const fleet: Ship[] = startingStars.map((star, index) => {
+    const startingShip = GameConfig.STARTING_SHIPS[index];
+    const catalogEntry = GameConfig.SHIP_CATALOG.find((shipType) => shipType.name === startingShip?.name);
+    return {
+      id: `ship-${index + 1}`,
+      typeId: catalogEntry?.id ?? startingShip?.name.toLowerCase().replace(/\s+/g, "-"),
+      name: startingShip?.name ?? `Transit-${index + 1}`,
+      currentStarId: star.id,
+      status: "idle",
+      integrity: 100,
+      capacity: startingShip?.capacity ?? 40,
+      speed: startingShip?.speed ?? 360,
+      maintenanceCost: startingShip?.maintenanceCost ?? 45,
+      operatingCostPerDistance: startingShip?.operatingCostPerDistance ?? 0.35,
+      purchasePrice: catalogEntry?.purchasePrice,
+      resaleValue: catalogEntry?.resaleValue,
+      equipmentSlots: catalogEntry?.equipmentSlots.map((module) => ({ ...module })) ?? [],
+      flightExperience: 0
+    };
+  });
 
   const state: CompanyState = {
     currentDay: 1,
@@ -51,7 +69,9 @@ export function createInitialCompanyState(mapData: MapData) {
     activeContracts: [],
     completedContracts: [],
     failedContracts: [],
+    regionalReputation: {},
     logs: [],
+    financialRecords: [],
     arisMessages: [],
     tutorialFlags: {
       welcomed: false,
@@ -63,8 +83,7 @@ export function createInitialCompanyState(mapData: MapData) {
     fimDeJogo: false
   };
 
-  pushArisMessage(state, "tutorial", "A.R.I.S. online. Nossa sobrevivência depende de entregas estáveis pelas starlanes.");
-  pushLog(state, "aris", "A.R.I.S.: Selecione um sistema e despache uma nave para manter a Astro-Transit solvente.");
+  pushLog(state, "info", "Diretoria operacional pronta. Selecione um sistema e despache uma nave para manter a Astro-Transit solvente.");
 
   return state;
 }
@@ -105,6 +124,18 @@ export function dispatchContract(
   });
 }
 
+export function purchaseShip(
+  shipTypeId: string,
+  context: SimulationContext,
+  dockStarId?: number
+): ShipPurchaseResult {
+  return purchaseShipInternal({
+    ...context,
+    pushLog,
+    getStarName
+  }, shipTypeId, dockStarId);
+}
+
 export function startShipMaintenance(
   shipId: string,
   context: SimulationContext
@@ -113,6 +144,30 @@ export function startShipMaintenance(
   const ship = state.fleet.find((candidate) => candidate.id === shipId);
   if (!ship) {
     return { ok: false, message: "Nave não encontrada." };
+  }
+
+  if (ship.status === "stranded" && ship.task) {
+    const emergencyCost = ship.maintenanceCost * 3;
+    const contractIndex = state.activeContracts.findIndex((contract) => contract.id === ship.task?.contractId);
+    if (contractIndex !== -1) {
+      const contract = state.activeContracts[contractIndex];
+      contract.status = "failed";
+      state.failedContracts.push(contract);
+      state.activeContracts.splice(contractIndex, 1);
+    }
+
+    state.credits -= emergencyCost;
+    pushFinancialRecord(state, "expense", emergencyCost, `Resgate emergencial de ${ship.name}`, { shipId: ship.id });
+    ship.currentStarId = ship.task.originStarId;
+    ship.task = undefined;
+    ship.status = "maintenance";
+    ship.maintenanceDaysRemaining = 2;
+    pushLog(state, "warn", `${ship.name} foi rebocada para manutenção emergencial. Contrato cancelado e custo de ${emergencyCost} créditos aplicado.`);
+    return {
+      ok: true,
+      message: `${ship.name} em manutenção emergencial.`,
+      ship
+    };
   }
 
   if (ship.task) {
@@ -128,6 +183,7 @@ export function startShipMaintenance(
   }
 
   state.credits -= ship.maintenanceCost;
+  pushFinancialRecord(state, "expense", ship.maintenanceCost, `Manutenção iniciada em ${ship.name}`, { shipId: ship.id });
   ship.status = "maintenance";
   ship.maintenanceDaysRemaining = 1;
   pushLog(state, "info", `${ship.name} entrou em manutenção. Custo imediato: ${ship.maintenanceCost} créditos.`);
@@ -135,6 +191,66 @@ export function startShipMaintenance(
   return {
     ok: true,
     message: `${ship.name} enviada para manutenção.`,
+    ship
+  };
+}
+
+export function relocateShip(
+  shipId: string,
+  destinationStarId: number,
+  context: SimulationContext
+): RelocationResult {
+  const { state, navigation, regionLookup } = context;
+  const ship = state.fleet.find((candidate) => candidate.id === shipId);
+  if (!ship) {
+    return { ok: false, message: "Nave não encontrada." };
+  }
+
+  if (ship.task) {
+    return { ok: false, message: "A nave precisa estar livre para reposicionamento." };
+  }
+
+  if (ship.status !== "idle" && ship.status !== "damaged") {
+    return { ok: false, message: "A nave precisa estar ociosa ou danificada para reposicionar." };
+  }
+
+  if (ship.currentStarId === destinationStarId) {
+    return { ok: false, message: "A nave já está neste sistema." };
+  }
+
+  const path = navigation.findShortestPath(ship.currentStarId, destinationStarId);
+  if (path.length === 0) {
+    return { ok: false, message: "Rota de reposicionamento indisponível." };
+  }
+
+  const totalDistance = navigation.computePathDistance(path);
+  const routeProfile = computeRouteProfile(path, regionLookup, state.regionalReputation);
+  const operatingCost = Math.round(totalDistance * ship.operatingCostPerDistance * routeProfile.logisticsMultiplier * 0.55);
+  if (state.credits < operatingCost) {
+    return { ok: false, message: "Créditos insuficientes para reposicionar esta nave." };
+  }
+
+  state.credits -= operatingCost;
+  pushFinancialRecord(state, "expense", operatingCost, `Reposicionamento de ${ship.name}`, { shipId: ship.id, regionId: routeProfile.originRegionId });
+
+  const totalEtaDays = Math.max(1, Math.ceil(totalDistance / ship.speed));
+  ship.status = "traveling";
+  ship.task = {
+    shipId: ship.id,
+    contractId: `relocation-${ship.id}-${state.currentDay}-${state.currentTick}`,
+    originStarId: ship.currentStarId,
+    destinationStarId,
+    path,
+    totalDistance,
+    remainingDistance: totalDistance,
+    remainingDays: totalEtaDays,
+    totalEtaDays
+  };
+
+  pushLog(state, "info", `${ship.name} iniciou reposicionamento. ETA: ${totalEtaDays} dias.`);
+  return {
+    ok: true,
+    message: `${ship.name} reposicionando.`,
     ship
   };
 }

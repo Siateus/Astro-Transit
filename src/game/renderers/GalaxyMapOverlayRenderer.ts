@@ -17,6 +17,7 @@ interface OverlayLayers {
 export class GalaxyMapOverlayRenderer {
   private readonly laneRenderer: StarlaneObject;
   private readonly routeRenderer: Phaser.GameObjects.Graphics;
+  private readonly previewRouteRenderer: Phaser.GameObjects.Graphics;
   private readonly shipRenderer: Phaser.GameObjects.Graphics;
   private readonly focusLabel: Phaser.GameObjects.Text;
   private readonly selectionGraphics: Phaser.GameObjects.Graphics;
@@ -26,6 +27,8 @@ export class GalaxyMapOverlayRenderer {
 
     this.routeRenderer = scene.add.graphics();
     layers.routeLayer.add(this.routeRenderer);
+    this.previewRouteRenderer = scene.add.graphics();
+    layers.routeLayer.add(this.previewRouteRenderer);
 
     this.shipRenderer = scene.add.graphics();
     layers.shipLayer.add(this.shipRenderer);
@@ -56,7 +59,8 @@ export class GalaxyMapOverlayRenderer {
     lookup: GameWorldLookup,
     laneAlpha: number,
     laneWidth: number,
-    zoomRatio: number
+    zoomRatio: number,
+    mapMode: "political" | "risk"
   ) {
     this.laneRenderer.beginFrame();
     lanes.forEach((lane) => {
@@ -67,9 +71,7 @@ export class GalaxyMapOverlayRenderer {
       }
 
       const alpha = Math.min(from.alpha, to.alpha) * (laneAlpha + Math.min(zoomRatio * 0.08, 0.14));
-      const laneColor = from.regionId && from.regionId === to.regionId
-        ? lookup.getRegionColorByRegionId(from.regionId) ?? UIStyle.PALETTE.CONNECTION_LINE
-        : UIStyle.PALETTE.CONNECTION_LINE;
+      const laneColor = getLaneColor(from, to, lookup, mapMode);
 
       this.laneRenderer.renderBetween(
         { x: from.screenX, y: from.screenY },
@@ -104,6 +106,28 @@ export class GalaxyMapOverlayRenderer {
       });
       this.routeRenderer.strokePath();
     });
+  }
+
+  renderRoutePreview(path: number[], risk: number, projectedStars: Map<number, ProjectedStar>, pulse = 1) {
+    this.previewRouteRenderer.clear();
+    if (path.length < 2) {
+      return;
+    }
+
+    const points = path
+      .map((starId) => projectedStars.get(starId))
+      .filter((star): star is ProjectedStar => Boolean(star));
+    if (points.length < 2) {
+      return;
+    }
+
+    this.previewRouteRenderer.lineStyle(4 + pulse, getRouteRiskColor(risk), 0.58 + (pulse * 0.12));
+    this.previewRouteRenderer.beginPath();
+    this.previewRouteRenderer.moveTo(points[0].screenX, points[0].screenY);
+    points.slice(1).forEach((point) => {
+      this.previewRouteRenderer.lineTo(point.screenX, point.screenY);
+    });
+    this.previewRouteRenderer.strokePath();
   }
 
   renderShips(companyState: CompanyState, projectedStars: Map<number, ProjectedStar>) {
@@ -161,6 +185,51 @@ export class GalaxyMapOverlayRenderer {
     this.selectionGraphics.lineStyle(1, UIStyle.PALETTE.STELLAR_GLOW, 0.24);
     this.selectionGraphics.strokeCircle(projected.screenX, projected.screenY, projected.radius * 4.6);
   }
+}
+
+function getLaneColor(
+  from: ProjectedStar,
+  to: ProjectedStar,
+  lookup: GameWorldLookup,
+  mapMode: "political" | "risk"
+) {
+  if (mapMode === "risk") {
+    const fromRisk = from.regionId ? lookup.getRegionRiskByRegionId(from.regionId) ?? 0 : 0;
+    const toRisk = to.regionId ? lookup.getRegionRiskByRegionId(to.regionId) ?? fromRisk : fromRisk;
+    return riskToColor((fromRisk + toRisk) / 2);
+  }
+
+  return from.regionId && from.regionId === to.regionId
+    ? lookup.getRegionColorByRegionId(from.regionId) ?? UIStyle.PALETTE.CONNECTION_LINE
+    : UIStyle.PALETTE.CONNECTION_LINE;
+}
+
+function riskToColor(riskScore: number) {
+  if (riskScore < 0.08) {
+    return 0x7fd7c4;
+  }
+
+  if (riskScore < 0.22) {
+    return 0xf2c96b;
+  }
+
+  if (riskScore < 0.38) {
+    return 0xff8a55;
+  }
+
+  return 0xff4b5f;
+}
+
+function getRouteRiskColor(risk: number) {
+  if (risk < 0.2) {
+    return 0x00ff00;
+  }
+
+  if (risk <= 0.5) {
+    return 0xffff00;
+  }
+
+  return 0xff0000;
 }
 
 function isProjectedStarVisible(projected: ProjectedStar, width: number, height: number, padding = 32) {

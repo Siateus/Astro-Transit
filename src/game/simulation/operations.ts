@@ -1,5 +1,6 @@
 import { CompanyState, LogEntry } from "../types/AstroTransit";
 import { GameConfig } from "../utils/GameConfig";
+import { pushFinancialRecord } from "./runtime";
 
 export interface OperationsDependencies {
   pushLog: (state: CompanyState, level: LogEntry["level"], message: string) => void;
@@ -21,6 +22,7 @@ export function applyMaintenanceCosts(state: CompanyState, dependencies: Operati
 
   const fixedCosts = maintenance + idlePortFees;
   state.credits -= fixedCosts;
+  pushFinancialRecord(state, "expense", fixedCosts, `Gastos fixos do dia (${maintenance} manutenção + ${idlePortFees} porto)`);
   dependencies.pushLog(
     state,
     "info",

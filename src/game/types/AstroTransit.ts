@@ -2,9 +2,18 @@ export type ShipStatus = "idle" | "traveling" | "damaged" | "stranded" | "mainte
 
 export type ContractStatus = "available" | "active" | "completed" | "failed";
 
-export type EventType = "pirates" | "warp_failure" | "logistics_crisis" | "safe_arrival";
+export type EventType = "pirates" | "warp_failure" | "logistics_crisis" | "police_interception" | "safe_arrival";
 
 export type LogLevel = "info" | "warn" | "error" | "success" | "aris";
+
+export type CargoType = "basic_supplies" | "luxury_goods" | "perishables" | "fragile" | "illegal";
+
+export type EquipmentModuleId = "reinforced_shields" | "warp_mk2";
+
+export interface ShipEquipmentModule {
+  id: EquipmentModuleId;
+  name: string;
+}
 
 export interface TravelTask {
   shipId: string;
@@ -20,6 +29,7 @@ export interface TravelTask {
 
 export interface Ship {
   id: string;
+  typeId?: string;
   name: string;
   currentStarId: number;
   status: ShipStatus;
@@ -28,6 +38,10 @@ export interface Ship {
   speed: number;
   maintenanceCost: number;
   operatingCostPerDistance: number;
+  purchasePrice?: number;
+  resaleValue?: number;
+  equipmentSlots: ShipEquipmentModule[];
+  flightExperience: number;
   maintenanceDaysRemaining?: number;
   task?: TravelTask;
 }
@@ -39,10 +53,12 @@ export interface Contract {
   destinationStarId: number;
   originRegionId?: string;
   destinationRegionId?: string;
+  cargoType: CargoType;
   cargoUnits: number;
   reward: number;
   penalty: number;
   risk: number;
+  routeRisk?: number;
   routeTax?: number;
   deadlineDay: number;
   status: ContractStatus;
@@ -65,6 +81,16 @@ export interface LogEntry {
   day: number;
   level: LogLevel;
   message: string;
+}
+
+export interface FinancialRecord {
+  id: string;
+  day: number;
+  type: "income" | "expense";
+  amount: number;
+  shipId?: string;
+  regionId?: string;
+  description: string;
 }
 
 export interface ArisMessage {
@@ -92,7 +118,9 @@ export interface CompanyState {
   activeContracts: Contract[];
   completedContracts: Contract[];
   failedContracts: Contract[];
+  regionalReputation: Record<string, number>;
   logs: LogEntry[];
+  financialRecords: FinancialRecord[];
   arisMessages: ArisMessage[];
   tutorialFlags: TutorialFlags;
   alerts: string[];

@@ -10,6 +10,7 @@ interface RenderOptions {
   glowStrength: number;
   isHighlighted: (starId: number) => boolean;
   lookup: GameWorldLookup;
+  mapMode: "political" | "risk";
 }
 
 export class GalaxyStarfieldRenderer {
@@ -35,11 +36,21 @@ export class GalaxyStarfieldRenderer {
         projection.alpha,
         options.glowStrength,
         options.isHighlighted(projection.id),
-        projection.regionId ? options.lookup.getRegionColorByRegionId(projection.regionId) : undefined,
+        projection.regionId ? getRegionOverlayColor(options.lookup, projection.regionId, options.mapMode) : undefined,
         projection.isCapital
       );
     });
 
     return projectedStars;
   }
+}
+
+function getRegionOverlayColor(
+  lookup: GameWorldLookup,
+  regionId: string,
+  mapMode: RenderOptions["mapMode"]
+) {
+  return mapMode === "risk"
+    ? lookup.getRegionRiskColorByRegionId(regionId)
+    : lookup.getRegionColorByRegionId(regionId);
 }

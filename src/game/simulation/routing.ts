@@ -9,6 +9,9 @@ export interface RouteProfile {
   originRegionId?: string;
   destinationRegionId?: string;
   riskModifier: number;
+  totalRiskScore: number;
+  averageRiskScore: number;
+  totalTaxRate: number;
   taxMultiplier: number;
   logisticsMultiplier: number;
   piracyMultiplier: number;
@@ -76,7 +79,11 @@ export function computePathDistance(path: number[], starLookup: StarLookup) {
   return total;
 }
 
-export function computeRouteProfile(path: number[], regionLookup?: RegionLookup): RouteProfile {
+export function computeRouteProfile(
+  path: number[],
+  regionLookup?: RegionLookup,
+  regionalReputation: Record<string, number> = {}
+): RouteProfile {
   const regions = path
     .map((systemId) => regionLookup?.getRegionByStarId(systemId))
     .filter((region): region is NonNullable<typeof region> => Boolean(region));
@@ -84,6 +91,9 @@ export function computeRouteProfile(path: number[], regionLookup?: RegionLookup)
   if (regions.length === 0) {
     return {
       riskModifier: 0,
+      totalRiskScore: 0,
+      averageRiskScore: 0,
+      totalTaxRate: 0,
       taxMultiplier: 1,
       logisticsMultiplier: 1,
       piracyMultiplier: 1,
@@ -94,14 +104,23 @@ export function computeRouteProfile(path: number[], regionLookup?: RegionLookup)
   const averageDanger = average(regions.map((region) => region.stats.danger));
   const averagePiracy = average(regions.map((region) => region.stats.piracy));
   const averageSecurity = average(regions.map((region) => region.stats.security));
-  const averageTax = average(regions.map((region) => region.stats.tax));
+  const averageTaxMultiplier = average(regions.map((region) => {
+    const reputation = regionalReputation[region.id] ?? 50;
+    return region.getTaxMultiplier(reputation);
+  }));
   const averageLogistics = average(regions.map((region) => region.stats.logistics));
+  const totalRiskScore = regions.reduce((sum, region) => sum + region.getRiskModifier(), 0);
+  const totalTaxRate = regions.reduce((sum, region) => sum + region.stats.tax, 0);
+  const averageRiskScore = totalRiskScore / regions.length;
 
   return {
     originRegionId: regions[0]?.id,
     destinationRegionId: regions[regions.length - 1]?.id,
-    riskModifier: Phaser.Math.Clamp((averageDanger * 0.32) + (averagePiracy * 0.28) - (averageSecurity * 0.18), -0.12, 0.36),
-    taxMultiplier: 1 + averageTax,
+    riskModifier: Phaser.Math.Clamp(averageRiskScore, -0.12, 0.36),
+    totalRiskScore,
+    averageRiskScore,
+    totalTaxRate,
+    taxMultiplier: averageTaxMultiplier,
     logisticsMultiplier: 1 + ((1 - averageLogistics) * 0.35),
     piracyMultiplier: 1 + averagePiracy,
     eventMultiplier: Phaser.Math.Clamp(1 + averageDanger + (averagePiracy * 0.5) - averageSecurity, 0.55, 1.85)

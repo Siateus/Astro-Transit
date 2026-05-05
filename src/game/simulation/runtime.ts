@@ -1,4 +1,4 @@
-import { ArisMessage, CompanyState, LogEntry } from "../types/AstroTransit";
+import { ArisMessage, CompanyState, FinancialRecord, LogEntry } from "../types/AstroTransit";
 import { StarLookup } from "./starLookup";
 
 export interface SimulationRuntimeDependencies {
@@ -18,6 +18,23 @@ export function pushLog(state: CompanyState, level: LogEntry["level"], message: 
     day: state.currentDay,
     level,
     message
+  });
+}
+
+export function pushFinancialRecord(
+  state: CompanyState,
+  type: FinancialRecord["type"],
+  amount: number,
+  description: string,
+  meta: Pick<FinancialRecord, "shipId" | "regionId"> = {}
+) {
+  state.financialRecords.push({
+    id: `fin-${state.currentDay}-${state.financialRecords.length}-${type}`,
+    day: state.currentDay,
+    type,
+    amount,
+    description,
+    ...meta
   });
 }
 

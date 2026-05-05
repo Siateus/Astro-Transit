@@ -16,7 +16,7 @@ export interface GameWorld {
   lookup: GameWorldLookup;
 }
 
-export function buildGameWorld(rawMapData: MapData): GameWorld {
+export function buildGameWorld(rawMapData: MapData, savedState?: CompanyState): GameWorld {
   const mapData = normalizeMapData(rawMapData);
   const starsById = buildStarsById(mapData.stars);
   const regions = buildRegions(mapData);
@@ -36,7 +36,7 @@ export function buildGameWorld(rawMapData: MapData): GameWorld {
     });
   });
 
-  const companyState = createInitialCompanyState(mapData);
+  const companyState = savedState ?? createInitialCompanyState(mapData);
   const lookup = new GameWorldLookup(starsById, regionsById, regionsBySystemId);
   const navigation = new GraphNavigationLookup(mapData.lanes, lookup);
   seedInitialContracts({
